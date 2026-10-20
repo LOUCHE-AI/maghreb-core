@@ -3,6 +3,7 @@
 #include "seq_vst.h"
 #include "seq_editor.h"
 #include "dx_sysex.h"
+#include "trigger_params.h"
 
 #include "public.sdk/source/main/pluginfactory.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
@@ -192,10 +193,18 @@ tresult PLUGIN_API SeqVST::initialize(FUnknown* context) {
         cache_[i] = (float)p.def;
         dsp_.setParam(i, (float)p.def);
     }
+    static const char* const kTriggerNames[kNumTriggers] = {
+        mdx::kPatchTriggerNames[0], mdx::kPatchTriggerNames[1],
+        mdx::kPatchTriggerNames[2], mdx::kPatchTriggerNames[3],
+        "Write MIDI", "Render Loop", "Render Kit",
+    };
+    mplat::addTriggerParams(parameters, kFirstTrigger, kTriggerNames, kNumTriggers);
+    triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }
 
 tresult PLUGIN_API SeqVST::terminate() {
+    triggers_.stop();
     editor_ = nullptr;
     return SingleComponentEffect::terminate();
 }
@@ -226,7 +235,9 @@ tresult PLUGIN_API SeqVST::process(ProcessData& data) {
             if (!q) continue;
             ParamValue v; int32 off;
             if (q->getPoint(q->getPointCount() - 1, off, v) != kResultTrue) continue;
-            applyParam(q->getParameterId(), v);
+            const int id = (int)q->getParameterId();
+            if (id >= kFirstTrigger) triggers_.feed(id - kFirstTrigger, v);
+            else applyParam((ParamID)id, v);
         }
     }
 
@@ -397,6 +408,42 @@ bool SeqVST::pickLaneVoice(const char* path, int voice, int lane) {
     laneCart_[lane] = path;
     laneVoiceIdx_[lane] = voice;
     return true;
+}
+
+// Whatever a controller pressed, and the line the editor shows for it. The
+// editor's own export buttons come through here too, so the two never say
+// different things.
+std::string SeqVST::runTrigger(int t, const mdx::CartIndex* idx) {
+    char msg[300];
+    if (t < mdx::kNumPatchTriggers) {
+        const int lane = editLane();
+        mdx::PatchRef p {laneCart_[lane], laneVoiceIdx_[lane]};
+        if (!mdx::patchForTrigger(t, p, cartridgeFolder(), mdx::favouritesFile("MaghrebSeq"), idx))
+            return mdx::noPatchMessage(t);
+        if (!pickLaneVoice(p.path.c_str(), p.voice, lane)) return "That cartridge would not read.";
+        markDirty();
+        snprintf(msg, sizeof msg, "Lane %d plays \"%s\".", lane + 1, laneVoiceName(lane));
+        return msg;
+    }
+    std::string err;
+    if (t == kTrigRenderKit) {
+        const int n = exportKit(&err);
+        if (n > 0)
+            snprintf(msg, sizeof msg, "Rendered %d strokes into the Exports folder, named by note.", n);
+        else
+            snprintf(msg, sizeof msg, "%s", err.empty() ? "Nothing to render." : err.c_str());
+        return msg;
+    }
+    if (t != kTrigWriteMidi && t != kTrigRenderLoop) return {};
+    const std::string path = (t == kTrigWriteMidi) ? exportMidi(&err) : exportAudio(&err);
+    if (!path.empty()) {
+        const size_t cut = path.find_last_of("/\\");
+        snprintf(msg, sizeof msg, "Wrote %s into the Exports folder.",
+                 (cut == std::string::npos ? path : path.substr(cut + 1)).c_str());
+    } else {
+        snprintf(msg, sizeof msg, "%s", err.empty() ? "Nothing to write." : err.c_str());
+    }
+    return msg;
 }
 
 void SeqVST::clearLaneVoice(int lane) {

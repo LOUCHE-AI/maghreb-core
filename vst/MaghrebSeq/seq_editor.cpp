@@ -558,7 +558,7 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
         });
         // This plug-in's own pool, not one shared with the others.
         browser_->setFavouritesFile(
-            mplat::userDataFolder("MaghrebSeq", "Favourites") + "/favourites.txt");
+            mdx::favouritesFile("MaghrebSeq"));
         browser_->rescan(SeqVST::cartridgeFolder());
         frame->addView(browser_);
         pageViews_[2].push_back(browser_);
@@ -634,6 +634,8 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
 
     if (plug_) {
         plug_->setEditor(this);
+        plug_->triggers().setEditorOpen(true);
+        plug_->setEditLane(lane_);
         for (CControl* c : bound_) {
             const double nv = plug_->getParamNormalized((ParamID)c->getTag());
             const ParamDef& d = params()[c->getTag()];
@@ -653,7 +655,7 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
 }
 
 void PLUGIN_API SeqEditor::close() {
-    if (plug_) plug_->setEditor(nullptr);
+    if (plug_) { plug_->setEditor(nullptr); plug_->triggers().setEditorOpen(false); }
     if (frame) frame->unregisterMouseObserver(this);
     bound_.clear();
     helpFor_.clear();
@@ -685,6 +687,7 @@ void SeqEditor::showPage(int page) {
 
 void SeqEditor::selectLane(int lane) {
     lane_ = std::max(0, std::min(mseq::kLanes - 1, lane));
+    if (plug_) plug_->setEditLane(lane_);      // where a controller's Next Patch lands
     if (grid_) grid_->setSelected(lane_);
     // The menus and the mute follow the selection rather than there being four
     // of each. That is what removes three quarters of the old control strip.
@@ -777,30 +780,9 @@ void SeqEditor::valueChanged(CControl* c) {
     }
     if (tag == kWriteMidiId || tag == kRenderLoopId || tag == kRenderKitId) {
         if (c->getValue() < 0.5f || !plug_) return;      // kick buttons fire twice
-        std::string err;
-        char msg[300];
-
-        if (tag == kRenderKitId) {
-            const int n = plug_->exportKit(&err);
-            if (n > 0)
-                snprintf(msg, sizeof msg,
-                         "Rendered %d strokes into the Exports folder, named by note.", n);
-            else
-                snprintf(msg, sizeof msg, "%s",
-                         err.empty() ? "Nothing to render." : err.c_str());
-        } else {
-            const std::string path = (tag == kWriteMidiId) ? plug_->exportMidi(&err)
-                                                           : plug_->exportAudio(&err);
-            if (!path.empty()) {
-                const size_t cut = path.find_last_of("/\\");
-                snprintf(msg, sizeof msg, "Wrote %s into the Exports folder.",
-                         (cut == std::string::npos ? path : path.substr(cut + 1)).c_str());
-            } else {
-                snprintf(msg, sizeof msg, "%s",
-                         err.empty() ? "Nothing to write." : err.c_str());
-            }
-        }
-        setHelp(msg);
+        setHelp(plug_->runTrigger(tag == kWriteMidiId  ? kTrigWriteMidi
+                                : tag == kRenderLoopId ? kTrigRenderLoop
+                                                       : kTrigRenderKit).c_str());
         return;
     }
 
@@ -1154,6 +1136,17 @@ void SeqEditor::showVoiceName() {
 
 CMessageResult SeqEditor::notify(CBaseObject* sender, const char* message) {
     if (message == CVSTGUITimer::kMsgTimer && plug_) {
+        // A controller's buttons, run here so the window follows them.
+        plug_->triggers().drain([this](int t) {
+            const std::string m = plug_->runTrigger(t, browser_ ? browser_->index() : nullptr);
+            if (t < mdx::kNumPatchTriggers) {
+                if (browser_)
+                    browser_->showSelection(plug_->laneCartPath(lane_), plug_->laneVoiceIndex(lane_));
+                showVoiceName();
+                refreshSet();
+            }
+            setHelp(m.c_str());
+        });
         const mseq::EngineView& v = plug_->snapshot();
         if (grid_) {
             for (int l = 0; l < mseq::kLanes; l++)

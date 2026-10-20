@@ -32,6 +32,26 @@ first. After copying, run this once in Terminal:
 
     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Maghreb*.vst3 ~/Library/Audio/Plug-Ins/VST3/Tape*.vst3 ~/Library/Audio/Plug-Ins/VST3/TubuDX.vst3
 
+## Controllers
+
+Every knob and switch is a host parameter, so any MIDI controller can be
+mapped to it the usual way. Two things go further:
+
+- **Knob pages.** The CLAP versions hand Bitwig named pages of eight
+  parameters, which turn up on an eight-encoder controller with no mapping -
+  a Novation Launchkey in Plugin mode, for one. Anything that could throw work
+  away (Reset, Revert, Arm, Record, Preset) is kept off them.
+- **Buttons.** What used to be only on screen is a parameter too, for a pad to
+  press: Prev/Next Patch and Prev/Next Favourite (MaghrebDX, TubuDX,
+  MaghrebSeq), Write MIDI, Render Loop, Render Kit (MaghrebSeq), Learn, Repair,
+  Revert, Split Side, Send to TapeGrain (TapeRepair), From Tape (TapeGrain).
+  They act on the press, not the release, so map pads as momentary. They work
+  with the plug-in's window closed.
+
+Patch steps go through every voice of every cartridge in the folder, in the
+browser's order; favourite steps go through that plug-in's starred list.
+MaghrebSeq's land on the lane last selected in its editor.
+
 ## Status
 
 Built and used daily on Linux (Bitwig 6, Audacity 4). The Windows and macOS
@@ -102,7 +122,9 @@ From a plug-in's folder most build as
 
 and a few also need the `.cpp` the linker names. `vst/shared/test_clap_host.cpp`
 is a minimal CLAP host that loads a built `.clap`, runs audio through it, round-
-trips its state and opens and reopens its editor.
+trips its state and opens and reopens its editor. With `CLAP_TEST_PRESS=1` it also
+presses the controller buttons; point `XDG_DATA_HOME` at a scratch folder with
+a cartridge in `MaghrebDX/Cartridges` first, since pressing them writes files.
 
 ## DX7 cartridges
 

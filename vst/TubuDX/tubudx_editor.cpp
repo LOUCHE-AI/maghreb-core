@@ -450,7 +450,7 @@ bool PLUGIN_API TubuDXEditor::open(void* parent, const PlatformType& type) {
         pageViews_[2].push_back(browser_);
         // This plug-in's own pool, not one shared with the others.
         browser_->setFavouritesFile(
-            mplat::userDataFolder("TubuDX", "Favourites") + "/favourites.txt");
+            mdx::favouritesFile("TubuDX"));
         browser_->rescan(TubuDXVST::cartridgeFolder());
         // A reopened Set already has a cartridge; put the lists on it rather
         // than on whatever happens to be first in the folder.
@@ -548,6 +548,7 @@ bool PLUGIN_API TubuDXEditor::open(void* parent, const PlatformType& type) {
 
     if (plug_) {
         plug_->setEditor(this);
+        plug_->triggers().setEditorOpen(true);
         for (CControl* c : bound_) {
             const double nv = plug_->getParamNormalized((ParamID)c->getTag());
             const ParamDef& d = kParams[c->getTag()];
@@ -564,7 +565,7 @@ bool PLUGIN_API TubuDXEditor::open(void* parent, const PlatformType& type) {
 }
 
 void PLUGIN_API TubuDXEditor::close() {
-    if (plug_) plug_->setEditor(nullptr);
+    if (plug_) { plug_->setEditor(nullptr); plug_->triggers().setEditorOpen(false); }
     if (frame) frame->unregisterMouseObserver(this);
     bound_.clear();
     readouts_.clear();
@@ -854,6 +855,14 @@ void TubuDXEditor::refreshValues() {
 
 CMessageResult TubuDXEditor::notify(CBaseObject* sender, const char* message) {
     if (message == CVSTGUITimer::kMsgTimer && plug_) {
+        // A controller's Next Patch, run here so the window follows it.
+        plug_->triggers().drain([this](int t) {
+            const std::string m = plug_->runTrigger(t, browser_ ? browser_->index() : nullptr);
+            if (browser_) browser_->showSelection(plug_->cartPath(), plug_->currentVoice());
+            refreshPatchView();
+            setHelp(m.c_str());
+            refreshValues();
+        });
         const tdx::EngineView& v = plug_->snapshot();
         if (ruler_) {
             ruler_->setEngine(v);

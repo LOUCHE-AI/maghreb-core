@@ -381,7 +381,7 @@ bool PLUGIN_API DXEditor::open(void* parent, const PlatformType& type) {
         });
         // This plug-in's own pool, not one shared with the others.
         browser_->setFavouritesFile(
-            mplat::userDataFolder("MaghrebDX", "Favourites") + "/favourites.txt");
+            mdx::favouritesFile("MaghrebDX"));
         browser_->rescan(DXVST::cartridgeFolder());
         if (plug_ && !plug_->cartPath().empty())
             browser_->showSelection(plug_->cartPath(), 0);
@@ -426,6 +426,7 @@ bool PLUGIN_API DXEditor::open(void* parent, const PlatformType& type) {
 
     if (plug_) {
         plug_->setEditor(this);
+        plug_->triggers().setEditorOpen(true);
         for (CControl* c : bound_) {
             const double nv = plug_->getParamNormalized((ParamID)c->getTag());
             const ParamDef& d = params()[c->getTag()];
@@ -442,7 +443,7 @@ bool PLUGIN_API DXEditor::open(void* parent, const PlatformType& type) {
 }
 
 void PLUGIN_API DXEditor::close() {
-    if (plug_) plug_->setEditor(nullptr);
+    if (plug_) { plug_->setEditor(nullptr); plug_->triggers().setEditorOpen(false); }
     if (frame) frame->unregisterMouseObserver(this);
     bound_.clear();
     readouts_.clear();
@@ -641,6 +642,13 @@ void DXEditor::refreshValues() {
 
 CMessageResult DXEditor::notify(CBaseObject* sender, const char* message) {
     if (message == CVSTGUITimer::kMsgTimer && plug_) {
+        // A controller's Next Patch, run here so the window follows it.
+        plug_->triggers().drain([this](int t) {
+            const std::string m = plug_->runTrigger(t, browser_ ? browser_->index() : nullptr);
+            if (browser_) browser_->showSelection(plug_->cartPath(), plug_->cartVoice());
+            setHelp(m.c_str());
+            refreshValues();
+        });
         const mdx::EngineView& v = plug_->snapshot();
         if (pads_) {
             pads_->setEngine(v);

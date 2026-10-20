@@ -16,6 +16,7 @@
 #include "handoff.h"
 #include "wav_io.h"
 #include "audio_import.h"
+#include "trigger_params.h"
 
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "public.sdk/source/main/pluginfactory.h"
@@ -144,10 +145,16 @@ tresult PLUGIN_API TapeRepairVST::initialize(FUnknown* context) {
         }
         if (i < kNumDsp) dsp_.setParam(i, (float)p.def);
     }
+    static const char* const kTriggerNames[kNumTriggers] = {
+        "Learn", "Repair", "Revert", "Split Side", "Send to TapeGrain",
+    };
+    mplat::addTriggerParams(parameters, kFirstTrigger, kTriggerNames, kNumTriggers);
+    triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }
 
 tresult PLUGIN_API TapeRepairVST::terminate() {
+    triggers_.stop();
     editor_ = nullptr;
     return SingleComponentEffect::terminate();
 }
@@ -203,7 +210,9 @@ tresult PLUGIN_API TapeRepairVST::process(ProcessData& data) {
             if (!q) continue;
             ParamValue v; int32 off;
             if (q->getPoint(q->getPointCount() - 1, off, v) != kResultTrue) continue;
-            applyParam(q->getParameterId(), v);
+            const int id = (int)q->getParameterId();
+            if (id >= kFirstTrigger) triggers_.feed(id - kFirstTrigger, v);
+            else applyParam(id, v);
         }
     }
 
@@ -287,6 +296,44 @@ bool TapeRepairVST::learn()  { return dsp_.learn(); }
 // to do to the host. The editor's timer watches it from here.
 bool TapeRepairVST::repair() { return dsp_.startRepair(); }
 void TapeRepairVST::revert() { dsp_.revert(); }
+
+std::string TapeRepairVST::runTrigger(int t) {
+    std::string err;
+    switch (t) {
+        case kTrigLearn:
+            // A controller has no waveform to click, so the floor comes from
+            // the quietest second, which is the editor's default too.
+            return learn() ? "Floor measured from the quietest second of the take. Now REPAIR."
+                           : "Nothing to measure - record a take first.";
+        case kTrigRepair:
+            // Pressing it again while it runs calls it off, as on screen.
+            if (dsp_.working()) { dsp_.cancel(); return "Stopping. The take is untouched."; }
+            if (!repair()) return "Nothing to repair - record a take first.";
+            return dsp_.hasProfile()
+                ? "Repairing. The tape plays through untouched while it works."
+                : "Repairing, but with no floor learned the denoise will do "
+                  "nothing. LEARN on a gap and REPAIR again.";
+        case kTrigRevert:
+            revert();
+            return "Repair discarded. The tape is untouched.";
+        case kTrigSplit: {
+            const int n = splitToFiles(&err);
+            if (n <= 0) return err.empty() ? "Nothing to split." : err;
+            char buf[200];
+            snprintf(buf, sizeof buf,
+                     "Wrote %d track%s into TapeGrain's samples folder. "
+                     "FROM TAPE there loads the last of them.", n, n == 1 ? "" : "s");
+            return buf;
+        }
+        case kTrigSend: {
+            const std::string path = sendToTapeGrain(&err);
+            if (path.empty()) return err.empty() ? "Could not write the file." : err;
+            return "Written to TapeGrain's samples folder: " +
+                   path.substr(path.find_last_of("/\\") + 1);
+        }
+        default: return {};
+    }
+}
 
 std::string TapeRepairVST::sendToTapeGrain(std::string* err) {
     const trestore::Clip& src = dsp_.hasRepair() ? dsp_.repaired() : dsp_.take();

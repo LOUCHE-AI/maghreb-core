@@ -15,6 +15,7 @@
 #include "public.sdk/source/vst/vstparameters.h"
 #include "base/source/fstreamer.h"
 #include "platform.h"
+#include "trigger_params.h"
 
 #include <cstring>
 #include <cstdio>
@@ -191,10 +192,14 @@ tresult PLUGIN_API DXVST::initialize(FUnknown* context) {
             dsp_.setParam(i, (float)p.def);
         }
     }
+    mplat::addTriggerParams(parameters, kFirstTrigger, mdx::kPatchTriggerNames,
+                            mdx::kNumPatchTriggers);
+    triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }
 
 tresult PLUGIN_API DXVST::terminate() {
+    triggers_.stop();
     editor_ = nullptr;
     return SingleComponentEffect::terminate();
 }
@@ -235,7 +240,9 @@ tresult PLUGIN_API DXVST::process(ProcessData& data) {
             if (!q) continue;
             ParamValue v; int32 off;
             if (q->getPoint(q->getPointCount() - 1, off, v) != kResultTrue) continue;
-            applyParam(q->getParameterId(), v);
+            const int id = (int)q->getParameterId();
+            if (id >= kFirstTrigger) triggers_.feed(id - kFirstTrigger, v);
+            else applyParam((ParamID)id, v);
         }
     }
 
@@ -407,7 +414,23 @@ bool DXVST::pickCartVoice(const char* path, int voice, int stroke) {
         if (dsp_.loadCartridge(path) <= 0) return false;
         cartPath_ = path;
     }
-    return dsp_.assignVoice(stroke, voice);
+    if (!dsp_.assignVoice(stroke, voice)) return false;
+    cartVoice_ = voice;
+    return true;
+}
+
+// Steps from the voice last picked and puts the next one on the selected pad,
+// as a click in the browser would, and strikes it so it is heard.
+std::string DXVST::runTrigger(int t, const mdx::CartIndex* idx) {
+    mdx::PatchRef p {cartPath_, cartVoice_};
+    if (!mdx::patchForTrigger(t, p, cartridgeFolder(), mdx::favouritesFile("MaghrebDX"), idx))
+        return mdx::noPatchMessage(t);
+    const int pad = selected();
+    if (!pickCartVoice(p.path.c_str(), p.voice, pad)) return "That cartridge would not read.";
+    audition(pad);
+    char b[160];
+    snprintf(b, sizeof b, "Pad %c now plays %s.", mdx::kStrokeChars[pad], importedName(pad));
+    return b;
 }
 
 std::string DXVST::cartridgeFolder() {

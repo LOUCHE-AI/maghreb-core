@@ -27,12 +27,25 @@ const clap_plugin_descriptor_t kDesc = {
     kFeatures,
 };
 
+// Eight knobs a page, for a controller's encoders (a Launchkey in Plugin
+// mode). Reset Stroke and Reset Kit stay off them: a knob nudged by accident
+// should never be able to throw a kit away.
+const mclap::RemotePage kPages[] = {
+    {"Kit",          {0, 1, 2, 3, 4, 5, 6, 7}},         // Kit Tune Decay FM Noise Tone Drive Level
+    {"Feel",         {8, 9, 10, 11, 12, 13, 14, 15}},   // Humanize Spread Vel>FM Vel>Tone Lowpass Highpass Output Stroke
+    {"Stroke",       {15, 16, 17, 18, 19, 20, 21, 22}}, // Stroke Freq Ratio Index FMTime Length Bend BendTime
+    {"Stroke Noise", {15, 23, 24, 25, 26, 27, 28, -1}}, // Stroke Noise NoiseFreq NoiseQ NoiseTime Gain Pan
+    {"Browse",       {31, 32, 33, 34, 15, -1, -1, -1}}, // Prev/Next Patch, Prev/Next Favourite, Stroke
+};
+
 const mclap::Vst3Spec kSpec = {
     &kDesc,
     Steinberg::Vst::DXVST::createInstance,
     false,     // audio in
     true,     // notes in
     false,     // notes out
+    kPages,
+    (int)(sizeof kPages / sizeof kPages[0]),
 };
 
 } // namespace

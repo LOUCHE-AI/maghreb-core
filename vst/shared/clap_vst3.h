@@ -26,12 +26,22 @@
 
 namespace mclap {
 
+// Eight knobs' worth of parameters, the way a controller with eight encoders
+// shows them: Bitwig puts these on a device's Remote Controls, which is what a
+// Launchkey's encoders turn in Plugin mode. -1 leaves a knob empty.
+struct RemotePage {
+    const char* name;
+    int ids[8];
+};
+
 struct Vst3Spec {
     const clap_plugin_descriptor_t* desc = nullptr;
     Steinberg::FUnknown* (*createInstance)(void*) = nullptr;
     bool audioIn = false;      // an effect, or a sampler that records
     bool noteIn = true;
     bool noteOut = false;      // the sequencer, which plays other things
+    const RemotePage* pages = nullptr;
+    int numPages = 0;
 };
 
 const clap_plugin_t* make(const Vst3Spec& spec, const clap_host_t* host);

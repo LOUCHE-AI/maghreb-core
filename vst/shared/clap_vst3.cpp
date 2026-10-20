@@ -718,6 +718,27 @@ clap_process_status CLAP_ABI plugProcess(const clap_plugin_t* p,
     return CLAP_PROCESS_CONTINUE;
 }
 
+uint32_t CLAP_ABI remoteCount(const clap_plugin_t* p) {
+    return (uint32_t)self(p)->spec->numPages;
+}
+
+bool CLAP_ABI remoteGet(const clap_plugin_t* p, uint32_t index,
+                        clap_remote_controls_page_t* page) {
+    const Vst3Spec* s = self(p)->spec;
+    if (index >= (uint32_t)s->numPages) return false;
+    const RemotePage& rp = s->pages[index];
+    std::memset(page, 0, sizeof *page);
+    std::snprintf(page->section_name, sizeof page->section_name, "%s", s->desc->name);
+    std::snprintf(page->page_name, sizeof page->page_name, "%s", rp.name);
+    page->page_id = index;
+    for (int k = 0; k < CLAP_REMOTE_CONTROLS_COUNT; k++)
+        page->param_ids[k] = rp.ids[k] < 0 ? CLAP_INVALID_ID : (clap_id)rp.ids[k];
+    page->is_for_preset = false;
+    return true;
+}
+
+const clap_plugin_remote_controls_t kRemote = {remoteCount, remoteGet};
+
 const void* CLAP_ABI plugExtension(const clap_plugin_t* p, const char* id) {
     Wrapper* w = self(p);
     if (!std::strcmp(id, CLAP_EXT_AUDIO_PORTS))      return &kPorts;
@@ -729,6 +750,9 @@ const void* CLAP_ABI plugExtension(const clap_plugin_t* p, const char* id) {
     if (!std::strcmp(id, CLAP_EXT_LATENCY))          return &kLatency;
     if (!std::strcmp(id, CLAP_EXT_NOTE_PORTS) && (w->spec->noteIn || w->spec->noteOut))
         return &kNotes;
+    if ((!std::strcmp(id, CLAP_EXT_REMOTE_CONTROLS) ||
+         !std::strcmp(id, CLAP_EXT_REMOTE_CONTROLS_COMPAT)) && w->spec->numPages > 0)
+        return &kRemote;
     return nullptr;
 }
 

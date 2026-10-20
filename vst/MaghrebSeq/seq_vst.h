@@ -15,6 +15,10 @@
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "seq_dsp.h"
 #include "seq_preset.h"
+#include "patch_triggers.h"
+#include "triggers.h"
+
+#include <atomic>
 
 #include <string>
 #include <vector>
@@ -42,6 +46,16 @@ const std::vector<ParamDef>& params();
 
 static const int kNumDsp = mseq::kNumParams;
 static const int kTotalParams = kNumDsp;
+
+// Buttons for a controller, never saved: the four patch steps, which land on
+// the lane last selected in the editor, then the three exports.
+static const int kFirstTrigger = kTotalParams;
+enum {
+    kTrigWriteMidi = mdx::kNumPatchTriggers,
+    kTrigRenderLoop,
+    kTrigRenderKit,
+    kNumTriggers
+};
 
 class SeqVST : public SingleComponentEffect {
 public:
@@ -88,6 +102,9 @@ public:
     void clearLaneVoice(int lane);
     bool laneHasVoice(int lane) const { return dsp_.laneHasVoice(lane); }
     const char* laneVoiceName(int lane) const { return dsp_.laneVoiceName(lane); }
+    int laneVoiceIndex(int lane) const {
+        return (lane >= 0 && lane < mseq::kLanes) ? laneVoiceIdx_[lane] : 0;
+    }
     const std::string& laneCartPath(int lane) const {
         static const std::string none;
         return (lane >= 0 && lane < mseq::kLanes) ? laneCart_[lane] : none;
@@ -144,6 +161,14 @@ public:
     bool setDirty() const { return dirty_; }
     void markDirty() { dirty_ = true; }
 
+    // ---- controller buttons ----
+    // The editor drains these from its timer while it is open; it also says
+    // which lane the patch steps land on.
+    mplat::Triggers& triggers() { return triggers_; }
+    std::string runTrigger(int t, const mdx::CartIndex* idx = nullptr);
+    void setEditLane(int lane) { editLane_.store(lane); }
+    int editLane() const { return editLane_.load(); }
+
 private:
     void applyParam(ParamID id, ParamValue norm01);
 
@@ -156,6 +181,8 @@ private:
     int laneVoiceIdx_[mseq::kLanes] = {0};
     std::string setPath_;
     bool dirty_ = false;
+    std::atomic<int> editLane_ {0};
+    mplat::Triggers triggers_;          // last: its thread stops before the rest goes
 };
 
 } // namespace Vst

@@ -4,6 +4,8 @@
 
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "tubudx_dsp.h"
+#include "patch_triggers.h"
+#include "triggers.h"
 
 #include <string>
 #include <vector>
@@ -32,6 +34,8 @@ extern const char* const kParamHelp[];
 static const int kNumDsp = tdx::kNumParams;
 static const int kRevertId = kNumDsp;          // wrapper-only
 static const int kTotalParams = kNumDsp + 1;
+// Prev/Next Patch, Prev/Next Favourite: buttons for a controller, never saved.
+static const int kFirstTrigger = kTotalParams;
 
 class TubuDXVST : public SingleComponentEffect {
 public:
@@ -87,6 +91,10 @@ public:
     int  tonic() const { return (int)(dsp_.getParam(tdx::kTonic) + 0.5f); }
     static std::string noteName(int midi);
 
+    // Controller buttons. The editor drains these from its timer while open.
+    mplat::Triggers& triggers() { return triggers_; }
+    std::string runTrigger(int t, const mdx::CartIndex* idx = nullptr);
+
 private:
     void applyParam(ParamID id, ParamValue norm01);
 
@@ -95,6 +103,7 @@ private:
     TubuDXEditor* editor_ = nullptr;
     int revert_ = 0;
     std::string cartPath_;
+    mplat::Triggers triggers_;          // last: its thread stops before the rest goes
 };
 
 } // namespace Vst

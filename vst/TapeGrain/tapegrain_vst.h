@@ -8,6 +8,7 @@
 
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "tapegrain_dsp.h"
+#include "triggers.h"
 
 #include <string>
 #include <vector>
@@ -46,6 +47,10 @@ static const int kNumDsp = tg::kNumParams;   // these map 1:1 onto the engine
 static const int kRecordId = kNumDsp;        // extra: arm recording
 static const int kPresetId = kNumDsp + 1;    // extra: recall a starting point
 static const int kTotalParams = kNumDsp + 2;
+
+// FROM TAPE, as a button a controller can press. Never saved.
+static const int kFirstTrigger = kTotalParams;
+enum { kTrigFromTape, kNumTriggers };
 
 class TapeGrainVST : public SingleComponentEffect {
 public:
@@ -111,6 +116,11 @@ public:
     // loaded. An empty outline is what the view draws its placeholder for.
     void buildOutline(int width, std::vector<float>& peaks, std::string& caption);
 
+    // Presses a controller button and returns the line to show for it. The
+    // editor's own FROM TAPE comes through here too.
+    mplat::Triggers& triggers() { return triggers_; }
+    std::string runTrigger(int t);
+
 private:
     void applyParam(ParamID id, ParamValue norm01);
     // notifyHost is false on the audio thread: performEdit is not callable there
@@ -121,6 +131,7 @@ private:
     std::string samplePath_[tg::kStemSlots];
     TapeGrainEditor* editor_ = nullptr;
     int preset_ = 0;
+    mplat::Triggers triggers_;          // last: its thread stops before the rest goes
 };
 
 } // namespace Vst

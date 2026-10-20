@@ -13,11 +13,13 @@
 #include <X11/Xlib.h>
 #include <dlfcn.h>
 #include <sys/select.h>
+#include <dirent.h>
 #include <ctime>
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <map>
 #include <string>
 #include <vector>
@@ -221,6 +223,112 @@ int main(int argc, char** argv) {
     snprintf(msg, sizeof msg, "%d blocks, audio in: %s", 32, hasIn ? "yes" : "no");
     ok("and renders finite audio", finite, msg);
 
+    // ---- knob pages: what a controller's eight encoders turn ----
+    if (const clap_plugin_remote_controls_t* rc = (const clap_plugin_remote_controls_t*)
+            p->get_extension(p, CLAP_EXT_REMOTE_CONTROLS)) {
+        const uint32_t pages = rc->count(p);
+        bool real = pages > 0;
+        for (uint32_t k = 0; k < pages && real; k++) {
+            clap_remote_controls_page_t pg{};
+            if (!rc->get(p, k, &pg) || !pg.page_name[0]) { real = false; break; }
+            for (int c = 0; c < CLAP_REMOTE_CONTROLS_COUNT && real; c++) {
+                double v = 0;
+                if (pg.param_ids[c] != CLAP_INVALID_ID && !pars->get_value(p, pg.param_ids[c], &v))
+                    real = false;
+            }
+        }
+        snprintf(msg, sizeof msg, "%u pages", pages);
+        ok("its knob pages name only real parameters", real, msg);
+    }
+
+    // ---- buttons: a controller pressing them ----
+    //
+    // Only with CLAP_TEST_PRESS set, because pressing them does things: run it
+    // with XDG_DATA_HOME pointed at a scratch folder holding a cartridge or two.
+    const bool pressing = std::getenv("CLAP_TEST_PRESS") != nullptr;
+    auto idOf = [&](const char* name) -> clap_id {
+        for (uint32_t i = 0; i < nParams; i++) {
+            clap_param_info_t info{};
+            if (pars->get_info(p, i, &info) && !std::strcmp(info.name, name)) return info.id;
+        }
+        return CLAP_INVALID_ID;
+    };
+    // One block with the value, then one with it let go: a pad press.
+    auto press = [&](clap_id id) {
+        for (double v : {1.0, 0.0}) {
+            clap_event_param_value_t e{};
+            e.header.size = sizeof e;
+            e.header.type = CLAP_EVENT_PARAM_VALUE;
+            e.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+            e.param_id = id;
+            e.value = v;
+            e.note_id = -1; e.port_index = -1; e.channel = -1; e.key = -1;
+            struct One {
+                static uint32_t CLAP_ABI size(const clap_input_events_t*) { return 1; }
+                static const clap_event_header_t* CLAP_ABI get(
+                    const clap_input_events_t* l, uint32_t) {
+                    return (const clap_event_header_t*)l->ctx;
+                }
+            };
+            clap_input_events_t one{&e, One::size, One::get};
+            clap_process_t pr{};
+            pr.frames_count = block;
+            pr.audio_outputs = &ab_out; pr.audio_outputs_count = 1;
+            if (hasIn) { pr.audio_inputs = &ab_in; pr.audio_inputs_count = 1; }
+            pr.in_events = &one;
+            pr.out_events = &outEv;
+            p->process(p, &pr);
+        }
+        pump(0.25);                           // the trigger thread looks every 20 ms
+    };
+    const clap_id next = idOf("Next Patch"), voice = idOf("Voice");
+    auto voiceNow = [&] { double v = 0; pars->get_value(p, voice, &v); return (int)std::lround(v * 31); };
+
+    if (pressing) {
+        if (next != CLAP_INVALID_ID && voice != CLAP_INVALID_ID) {
+            press(next);
+            double a = 0, b = 0;
+            pars->get_value(p, voice, &a);
+            press(next);
+            pars->get_value(p, voice, &b);
+            const int va = (int)std::lround(a * 31), vb = (int)std::lround(b * 31);
+            snprintf(msg, sizeof msg, "voice %d, then %d", va + 1, vb + 1);
+            ok("Next Patch steps one voice per press", vb == va + 1, msg);
+        }
+
+        if (next != CLAP_INVALID_ID && voice == CLAP_INVALID_ID) {
+            press(next);
+            const clap_plugin_state_t* st =
+                (const clap_plugin_state_t*)p->get_extension(p, CLAP_EXT_STATE);
+            std::string bytes;
+            clap_ostream_t os{&bytes, [](const clap_ostream_t* s, const void* d, uint64_t n) -> int64_t {
+                ((std::string*)s->ctx)->append((const char*)d, (size_t)n);
+                return (int64_t)n;
+            }};
+            ok("Next Patch loads a cartridge voice", st && st->save(p, &os) &&
+               bytes.find(".syx") != std::string::npos);
+        }
+
+        const clap_id midi = idOf("Write MIDI");
+        if (midi != CLAP_INVALID_ID) {
+            const char* x = std::getenv("XDG_DATA_HOME");
+            const std::string dir = std::string(x ? x : "") + "/MaghrebSeq/Exports";
+            auto count = [&] {
+                int n = 0;
+                if (DIR* d = opendir(dir.c_str())) {
+                    while (dirent* f = readdir(d))
+                        if (std::strstr(f->d_name, ".mid")) n++;
+                    closedir(d);
+                }
+                return n;
+            };
+            const int before = count();
+            press(midi);
+            snprintf(msg, sizeof msg, "%d MIDI files, then %d", before, count());
+            ok("Write MIDI writes one", count() == before + 1, msg);
+        }
+    }
+
     // ---- state: what a project file keeps ----
     //
     // Written blind against the CLAP stream API, and a mistake here loses a
@@ -344,6 +452,13 @@ int main(int argc, char** argv) {
 
             printf("       window id 0x%lx - capture it now if you want to look\n", win);
             pump(0.4);
+
+            if (pressing && next != CLAP_INVALID_ID && voice != CLAP_INVALID_ID) {
+                const int a = voiceNow();
+                press(next);
+                snprintf(msg, sizeof msg, "voice %d, then %d", a + 1, voiceNow() + 1);
+                ok("with the editor open, its timer takes the press", voiceNow() == a + 1, msg);
+            }
 
             // Close it and open it again, which is what a person does and
             // what the first version of this test never tried.

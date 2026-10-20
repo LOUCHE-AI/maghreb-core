@@ -635,6 +635,7 @@ bool PLUGIN_API TapeGrainEditor::open(void* parent, const PlatformType& type) {
     showSection(0);
     if (plug_) {
         plug_->setEditor(this);
+        plug_->triggers().setEditorOpen(true);
         for (CControl* c : bound_) {
             double nv = plug_->getParamNormalized((ParamID)c->getTag());
             const ParamDef& d = kParams[c->getTag()];
@@ -652,7 +653,7 @@ bool PLUGIN_API TapeGrainEditor::open(void* parent, const PlatformType& type) {
 }
 
 void PLUGIN_API TapeGrainEditor::close() {
-    if (plug_) plug_->setEditor(nullptr);
+    if (plug_) { plug_->setEditor(nullptr); plug_->triggers().setEditorOpen(false); }
     if (frame) frame->unregisterMouseObserver(this);
     tabs_.clear();
     stemBtns_.clear();
@@ -859,19 +860,9 @@ void TapeGrainEditor::valueChanged(CControl* c) {
     }
 
     if (tag == kFromTapeTag) {
-        const std::string path = mhand::newest();
-        if (path.empty()) {
-            setHelp("Nothing has been sent over yet - repair a tape in "
-                    "TapeRepair and press SEND TO TAPEGRAIN.");
-            return;
-        }
-        if (!plug_ || !plug_->loadSample(path.c_str())) {
-            setHelp("Found the tape but could not read it.");
-            return;
-        }
+        if (!plug_) return;
+        setHelp(plug_->runTrigger(kTrigFromTape).c_str());
         refreshStems();
-        std::string msg = "Loaded " + mhand::nameOf(path) + ".";
-        setHelp(msg.c_str());
         return;
     }
 
@@ -1084,6 +1075,11 @@ void TapeGrainEditor::refreshWaveform() {
 
 CMessageResult TapeGrainEditor::notify(CBaseObject* sender, const char* message) {
     if (message == CVSTGUITimer::kMsgTimer && plug_) {
+        // A controller's FROM TAPE, run here so the window follows it.
+        plug_->triggers().drain([this](int t) {
+            setHelp(plug_->runTrigger(t).c_str());
+            refreshStems();
+        });
         const int live = plug_->activeVoices();
         if (wave_) {
             // redraw the live layer only while something is sounding, so an

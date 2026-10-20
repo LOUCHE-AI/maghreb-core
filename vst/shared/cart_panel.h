@@ -117,6 +117,9 @@ public:
 
     int cartCount() const { return index_.count(); }
 
+    // The scanned index, for Prev/Next Patch; null while a scan is in flight.
+    const CartIndex* index() const { return scanning_ ? nullptr : &index_; }
+
     void valueChanged(VSTGUI::CControl* c) override;
 
     ~CartPanel() override;

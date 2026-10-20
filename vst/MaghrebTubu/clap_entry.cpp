@@ -27,12 +27,21 @@ const clap_plugin_descriptor_t kDesc = {
     kFeatures,
 };
 
+// Eight knobs a page, for a controller's encoders (a Launchkey in Plugin
+// mode). Revert stays off them: a nudged knob should not undo a tuning.
+const mclap::RemotePage kPages[] = {
+    {"Tuning", {0, 1, 2, 13, 14, 3, 4, -1}},          // Tab Tonic Mapping Degree Cents Drone DroneLevel
+    {"Sound",  {5, 6, 7, 8, 9, 10, 11, 12}},          // Brightness Damping Decay Bow Attack Release Level Output
+};
+
 const mclap::Vst3Spec kSpec = {
     &kDesc,
     Steinberg::Vst::TubuVST::createInstance,
     false,     // audio in
     true,     // notes in
     false,     // notes out
+    kPages,
+    (int)(sizeof kPages / sizeof kPages[0]),
 };
 
 } // namespace

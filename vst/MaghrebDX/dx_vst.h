@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "patch_triggers.h"
+#include "triggers.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "dx_dsp.h"
 
@@ -31,6 +33,8 @@ static const int kNumDsp = mdx::kNumParams;
 static const int kResetOneId = kNumDsp;       // wrapper-only
 static const int kResetAllId = kNumDsp + 1;
 static const int kTotalParams = kNumDsp + 2;
+// Prev/Next Patch, Prev/Next Favourite: buttons for a controller, never saved.
+static const int kFirstTrigger = kTotalParams;
 
 class DXVST : public SingleComponentEffect {
 public:
@@ -76,6 +80,7 @@ public:
     // is a different one.
     bool pickCartVoice(const char* path, int voice, int stroke);
     const std::string& cartPath() const { return cartPath_; }
+    int cartVoice() const { return cartVoice_; }
     void clearVoice(int stroke) { dsp_.clearVoice(stroke); }
     bool usesImported(int s) const { return dsp_.usesImported(s); }
     const char* importedName(int s) const { return dsp_.importedName(s); }
@@ -85,6 +90,10 @@ public:
     bool strokeEdited(int i) const { return dsp_.strokeEdited(i); }
     int  activeVoices() const { return dsp_.activeVoices(); }
 
+    // Controller buttons. The editor drains these from its timer while open.
+    mplat::Triggers& triggers() { return triggers_; }
+    std::string runTrigger(int t, const mdx::CartIndex* idx = nullptr);
+
 private:
     void applyParam(ParamID id, ParamValue norm01);
     void pushSelectedToUI();            // stroke table -> edit parameters
@@ -93,6 +102,8 @@ private:
     float cache_[kNumDsp] = {0};
     DXEditor* editor_ = nullptr;
     std::string cartPath_;
+    int cartVoice_ = 0;                 // the last voice picked from it
+    mplat::Triggers triggers_;          // last: its thread stops before the rest goes
 };
 
 } // namespace Vst

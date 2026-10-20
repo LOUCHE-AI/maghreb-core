@@ -22,6 +22,8 @@
 #include "public.sdk/source/vst/vstparameters.h"
 #include "base/source/fstreamer.h"
 #include "platform.h"
+#include "handoff.h"
+#include "trigger_params.h"
 
 #include <cstring>
 #include <cstdio>
@@ -281,10 +283,14 @@ tresult PLUGIN_API TapeGrainVST::initialize(FUnknown* context) {
             dsp_.setParam(i, (float)p.def);
         }
     }
+    static const char* const kTriggerNames[kNumTriggers] = {"From Tape"};
+    mplat::addTriggerParams(parameters, kFirstTrigger, kTriggerNames, kNumTriggers);
+    triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }
 
 tresult PLUGIN_API TapeGrainVST::terminate() {
+    triggers_.stop();
     editor_ = nullptr;
     return SingleComponentEffect::terminate();
 }
@@ -338,7 +344,9 @@ tresult PLUGIN_API TapeGrainVST::process(ProcessData& data) {
             if (!q) continue;
             ParamValue v; int32 off;
             if (q->getPoint(q->getPointCount() - 1, off, v) != kResultTrue) continue;
-            applyParam(q->getParameterId(), v);
+            const int id = (int)q->getParameterId();
+            if (id >= kFirstTrigger) triggers_.feed(id - kFirstTrigger, v);
+            else applyParam((ParamID)id, v);
         }
     }
 
@@ -686,6 +694,17 @@ void TapeGrainVST::applyParam(ParamID id, ParamValue norm01) {
         int idx = (int)(denorm(kPresetId, norm01) + 0.5);
         if (idx != preset_) recallPreset(idx, false);
     }
+}
+
+// The newest tape TapeRepair sent over, into the active slot.
+std::string TapeGrainVST::runTrigger(int t) {
+    if (t != kTrigFromTape) return {};
+    const std::string path = mhand::newest();
+    if (path.empty())
+        return "Nothing has been sent over yet - repair a tape in "
+               "TapeRepair and press SEND TO TAPEGRAIN.";
+    if (!loadSample(path.c_str())) return "Found the tape but could not read it.";
+    return "Loaded " + mhand::nameOf(path) + ".";
 }
 
 } // namespace Vst

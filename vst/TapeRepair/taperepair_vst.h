@@ -8,6 +8,7 @@
 
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "taperepair_dsp.h"
+#include "triggers.h"
 
 #include <string>
 
@@ -42,6 +43,10 @@ static const int kPlayId  = kNumDsp + 1;        // extra: play the take back
 static const int kFollowId   = kNumDsp + 2;     // arm with the host transport
 static const int kAutoStopId = kNumDsp + 3;     // end the take at the run-out
 static const int kTotalParams = kNumDsp + 4;
+
+// The buttons that are not settings, for a controller to press. Never saved.
+static const int kFirstTrigger = kTotalParams;
+enum { kTrigLearn, kTrigRepair, kTrigRevert, kTrigSplit, kTrigSend, kNumTriggers };
 
 class TapeRepairVST : public SingleComponentEffect {
 public:
@@ -89,12 +94,18 @@ public:
 
     void setEditor(TapeRepairEditor* e) { editor_ = e; }
 
+    // Presses one of those buttons and returns the line to show for it. The
+    // editor's own buttons come through here too.
+    mplat::Triggers& triggers() { return triggers_; }
+    std::string runTrigger(int t);
+
 private:
     void applyParam(int id, double normalized);
 
     trep::TapeRepair dsp_;
     TapeRepairEditor* editor_ = nullptr;
     double sampleRate_ = 48000.0;
+    mplat::Triggers triggers_;          // last: its thread stops before the rest goes
 };
 
 } // namespace Vst

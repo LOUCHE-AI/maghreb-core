@@ -289,12 +289,12 @@ bool PLUGIN_API TapeRepairEditor::open(void* parent, const PlatformType& type) {
     refreshWave();
     refreshCells();
     refreshStatus();
-    if (plug_) plug_->setEditor(this);
+    if (plug_) { plug_->setEditor(this); plug_->triggers().setEditorOpen(true); }
     return true;
 }
 
 void PLUGIN_API TapeRepairEditor::close() {
-    if (plug_) plug_->setEditor(nullptr);
+    if (plug_) { plug_->setEditor(nullptr); plug_->triggers().setEditorOpen(false); }
     if (frame) {
         frame->unregisterMouseObserver(this);
         frame->forget();
@@ -476,61 +476,36 @@ void TapeRepairEditor::valueChanged(CControl* c) {
             // A side of tape is half a minute of work, so this hands the job to
             // a worker and comes straight back. The timer below reports it, and
             // pressing REPAIR again while it runs is how you call it off.
-            if (plug_->engine().working()) {
-                plug_->engine().cancel();
-                setHelp("Stopping. The take is untouched.");
-            } else if (plug_->repair()) {
-                setHelp(plug_->engine().hasProfile()
-                    ? "Repairing. The tape plays through untouched while it works."
-                    : "Repairing, but with no floor learned the denoise will do "
-                      "nothing. LEARN on a gap and REPAIR again.");
-            } else {
-                setHelp("Nothing to repair - record a take first.");
-            }
+            setHelp(plug_->runTrigger(kTrigRepair).c_str());
             refreshStatus();
             break;
 
-        case kSplitTag: {
-            std::string err;
-            const int n = plug_->splitToFiles(&err);
-            if (n > 0) {
-                char buf[200];
-                snprintf(buf, sizeof buf,
-                         "Wrote %d track%s into TapeGrain's samples folder. "
-                         "FROM TAPE there loads the last of them.",
-                         n, n == 1 ? "" : "s");
-                setHelp(buf);
-            } else {
-                setHelp(err.empty() ? "Nothing to split." : err.c_str());
-            }
+        case kSplitTag:
+            setHelp(plug_->runTrigger(kTrigSplit).c_str());
             break;
-        }
 
         case kRevertTag:
-            plug_->revert();
-            setHelp("Repair discarded. The tape is untouched.");
+            setHelp(plug_->runTrigger(kTrigRevert).c_str());
             refreshWave();
             refreshStatus();
             break;
 
-        case kSendTag: {
-            std::string err;
-            const std::string path = plug_->sendToTapeGrain(&err);
-            if (path.empty()) {
-                setHelp(err.empty() ? "Could not write the file." : err.c_str());
-            } else {
-                std::string msg = "Written to TapeGrain's samples folder: " +
-                                  path.substr(path.find_last_of('/') + 1);
-                setHelp(msg.c_str());
-            }
+        case kSendTag:
+            setHelp(plug_->runTrigger(kTrigSend).c_str());
             break;
-        }
         default: break;
     }
 }
 
 CMessageResult TapeRepairEditor::notify(CBaseObject* sender, const char* message) {
     if (message == CVSTGUITimer::kMsgTimer && plug_) {
+        // A controller's buttons, run here so the window follows them.
+        plug_->triggers().drain([this](int t) {
+            setHelp(plug_->runTrigger(t).c_str());
+            refreshStatus();
+            // Not while a repair runs: its worker owns the buffers these draw.
+            if (!plug_->engine().working()) { refreshWave(); refreshCells(); }
+        });
         const trep::TapeRepair& e = plug_->engine();
 
         // The worker owns the take and the repair while it runs, so nothing

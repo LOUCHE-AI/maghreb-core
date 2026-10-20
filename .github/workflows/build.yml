@@ -69,11 +69,17 @@ jobs:
             strip --strip-unneeded out/CLAP/*.clap out/VST3/*.vst3/Contents/x86_64-linux/*.so
           fi
           cp LICENSE vst/NOTICE.txt out/
+          # Zipped here, on the system it was built on, so Mac bundles keep
+          # their permissions and signatures exactly as built.
+          zip_name="maghreb-instruments-${{ matrix.name }}.zip"
+          cd out
+          if [ "$RUNNER_OS" = Windows ]; then 7z a -tzip "../$zip_name" . > /dev/null
+          else zip -qry "../$zip_name" .; fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: maghreb-instruments-${{ matrix.name }}
-          path: out
+          path: maghreb-instruments-${{ matrix.name }}.zip
 
   release:
     # always(): GitHub's Mac runners are sometimes too busy to start; the
@@ -85,11 +91,24 @@ jobs:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
-      - name: Zip and publish
+        with:
+          merge-multiple: true
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for d in maghreb-instruments-*; do (cd "$d" && zip -qr "../$d.zip" .); done
+          cat > notes.md <<'EOF'
+          Eight plug-ins: VST3 on every system, plus CLAP on Linux.
+
+          | System | Download |
+          |---|---|
+          | Linux (x86-64, Ubuntu 22.04 / Debian 12 or newer) | `maghreb-instruments-linux-x86_64.zip` |
+          | Windows 10/11 (64-bit) | `maghreb-instruments-windows-x64.zip` |
+          | macOS 10.15+ (Intel and Apple silicon) | `maghreb-instruments-macos-universal.zip` |
+
+          Where the files go, and the one Terminal command macOS needs because
+          the plug-ins are not signed by Apple: see the
+          [README](https://github.com/LOUCHE-AI/maghreb-instruments#download).
+          EOF
           gh release create "$GITHUB_REF_NAME" maghreb-instruments-*.zip \
-            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" \
-            --notes "Download the zip for your system and see the README for where the files go."
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md

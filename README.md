@@ -21,11 +21,11 @@ Get the zip for your system from the
 [latest release](https://github.com/LOUCHE-AI/maghreb-instruments/releases/latest),
 unzip it, and copy the plug-ins to where your DAW looks:
 
-| System  | VST3 goes in | CLAP goes in |
-|---------|--------------|--------------|
-| Linux   | `~/.vst3` | `~/.clap` |
-| Windows | `C:\Program Files\Common Files\VST3` | – |
-| macOS   | `~/Library/Audio/Plug-Ins/VST3` | – |
+| System  | Needs | VST3 goes in | CLAP goes in |
+|---------|-------|--------------|--------------|
+| Linux   | x86-64, glibc 2.35+ (Ubuntu 22.04, Debian 12 or newer) | `~/.vst3` | `~/.clap` |
+| Windows | 64-bit Windows 10 or 11 | `C:\Program Files\Common Files\VST3` | – |
+| macOS   | macOS 10.15 or newer, Intel or Apple silicon | `~/Library/Audio/Plug-Ins/VST3` | – |
 
 **macOS:** the plug-ins are not signed by Apple, so macOS blocks them at
 first. After copying, run this once in Terminal:
@@ -35,8 +35,9 @@ first. After copying, run this once in Terminal:
 ## Status
 
 Built and used daily on Linux (Bitwig 6, Audacity 4). The Windows and macOS
-builds are made automatically on every change, but nobody has tried them in a
-DAW yet. Reports of what works and what doesn't are very welcome.
+builds are made automatically on every change and pass Steinberg's VST3
+validator there, but nobody has played them in a DAW on those systems yet.
+Reports of what works and what doesn't are very welcome.
 
 Known gaps outside Linux:
 
@@ -45,7 +46,7 @@ Known gaps outside Linux:
   Demucs and ffmpeg; on Windows that is not wired up yet, so stems are off and
   TapeRepair imports WAV only.
 
-## Building (Linux)
+## Building
 
 You need CMake ≥ 3.20, a C++17 compiler, the VST3 SDK's Linux dependencies
 ([Steinberg's list](https://steinbergmedia.github.io/vst3_dev_portal/pages/Getting+Started/How+to+setup+my+system.html#for-linux);
@@ -75,6 +76,11 @@ libcairo2-dev libgtkmm-3.0-dev libsqlite3-dev libxcb-keysyms1-dev`), and the
 
 If the CLAP headers are not installed system-wide, add
 `-DCMAKE_CXX_FLAGS=-I/path/to/clap/include` to the first cmake line.
+
+On Windows (Visual Studio) and macOS (Xcode) the steps are the same without
+step 2; on macOS add `-G Xcode` to the first cmake line. No CLAP is built
+there. [.github/workflows/build.yml](.github/workflows/build.yml) is the exact
+recipe for all three.
 
 ## Layout
 

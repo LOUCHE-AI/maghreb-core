@@ -6,6 +6,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#else
+#include <process.h>
+#define getpid _getpid
 #endif
 
 #include <algorithm>

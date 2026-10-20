@@ -10,6 +10,9 @@
 // Not wired up on Windows yet. Everything below is POSIX process handling and
 // has no honest Windows equivalent short of CreateProcess and overlapped
 // pipes; saying so is better than pretending the button works.
+#include <io.h>
+#define access _access
+#define X_OK 0  // _access can only test existence
 #else
 #include <spawn.h>
 #include <unistd.h>

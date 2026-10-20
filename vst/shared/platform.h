@@ -14,10 +14,23 @@
 
 #include <string>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <system_error>
 
 namespace mplat {
+
+// Local time, for file-name stamps. localtime_r is POSIX; MSVC has localtime_s
+// with the arguments the other way round.
+inline std::tm localTime(std::time_t t) {
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    return tm;
+}
 
 // Where this plug-in family keeps its own files: kits, cartridges, sets.
 //

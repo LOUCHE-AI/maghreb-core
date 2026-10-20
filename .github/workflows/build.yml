@@ -63,6 +63,8 @@ jobs:
           cp -R build/*/VST3/Release/*.vst3 out/VST3/
           if [ "$RUNNER_OS" = Linux ]; then
             mkdir -p out/CLAP && cp build/*/lib/Release/*.clap out/CLAP/
+            # the SDK builds with debug info even in Release: 16 MB -> 1.7 MB each
+            strip --strip-unneeded out/CLAP/*.clap out/VST3/*.vst3/Contents/x86_64-linux/*.so
           fi
           cp LICENSE vst/NOTICE.txt out/
 

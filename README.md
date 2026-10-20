@@ -15,12 +15,35 @@ into desktop plug-ins.
 | TapeRepair   | Record a tape transfer, mend it offline (hum, hiss, DC offset, level), split a side into tracks. |
 | TubuDX       | A DX7 voice per pad, tuned to a ṭabʿ rather than to twelve. |
 
+## Download
+
+Get the zip for your system from the
+[latest release](https://github.com/LOUCHE-AI/maghreb-instruments/releases/latest),
+unzip it, and copy the plug-ins to where your DAW looks:
+
+| System  | VST3 goes in | CLAP goes in |
+|---------|--------------|--------------|
+| Linux   | `~/.vst3` | `~/.clap` |
+| Windows | `C:\Program Files\Common Files\VST3` | – |
+| macOS   | `~/Library/Audio/Plug-Ins/VST3` | – |
+
+**macOS:** the plug-ins are not signed by Apple, so macOS blocks them at
+first. After copying, run this once in Terminal:
+
+    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Maghreb*.vst3 ~/Library/Audio/Plug-Ins/VST3/Tape*.vst3 ~/Library/Audio/Plug-Ins/VST3/TubuDX.vst3
+
 ## Status
 
-Built and used daily on Linux (Bitwig 6, Audacity 4). The CMake files have
-Windows and macOS sections, but nothing is currently built or tested there.
-The CLAP versions embed their editor through X11, so CLAP is Linux-only for now.
-A Windows build is the most useful thing someone could add.
+Built and used daily on Linux (Bitwig 6, Audacity 4). The Windows and macOS
+builds are made automatically on every change, but nobody has tried them in a
+DAW yet. Reports of what works and what doesn't are very welcome.
+
+Known gaps outside Linux:
+
+- CLAP is Linux-only: its editor is embedded through X11.
+- TapeGrain's stem separation and TapeRepair's MP3/FLAC import call out to
+  Demucs and ffmpeg; on Windows that is not wired up yet, so stems are off and
+  TapeRepair imports WAV only.
 
 ## Building (Linux)
 

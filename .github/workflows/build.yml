@@ -33,7 +33,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev \
             libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
-            libfreetype-dev libcairo2-dev libpango1.0-dev libsqlite3-dev libxcb-keysyms1-dev
+            libfreetype-dev libcairo2-dev libpango1.0-dev libgtkmm-3.0-dev libsqlite3-dev libxcb-keysyms1-dev
           git clone --depth 1 --branch 1.2.10 https://github.com/free-audio/clap.git "$RUNNER_TEMP/clap"
           echo "CXXFLAGS=-I$RUNNER_TEMP/clap/include" >> "$GITHUB_ENV"
 
@@ -49,11 +49,13 @@ jobs:
 
       - name: Build
         run: |
+          # Keep going past a failure so one run shows every plug-in's errors.
+          fail=0
           for p in MaghrebDX MaghrebFM MaghrebSeq MaghrebTubu MaghrebTune TapeGrain TapeRepair TubuDX; do
-            cmake -S vst/$p -B build/$p -DCMAKE_BUILD_TYPE=Release \
-              -DVSTGUI_STANDALONE=OFF -DVSTGUI_TOOLS=OFF
-            cmake --build build/$p --config Release --parallel 4
+            { cmake -S vst/$p -B build/$p -DCMAKE_BUILD_TYPE=Release &&
+              cmake --build build/$p --config Release --parallel 4; } || { echo "::error::$p failed"; fail=1; }
           done
+          exit $fail
 
       - name: Package
         run: |

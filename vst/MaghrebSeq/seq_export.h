@@ -32,7 +32,11 @@ inline std::string stampedName(const MaghrebSeq& dsp, const char* what,
     char stamp[32];
     const std::time_t t = std::time(nullptr);
     std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
     localtime_r(&t, &tm);
+#endif
     std::strftime(stamp, sizeof stamp, "%Y-%m-%d %H%M%S", &tm);
 
     char name[256];

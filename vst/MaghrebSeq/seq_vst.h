@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "seq_dsp.h"
 #include "seq_preset.h"
@@ -55,6 +56,21 @@ enum {
     kTrigRenderLoop,
     kTrigRenderKit,
     kNumTriggers
+};
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+// The song chain's forty slots are hidden from the host instead (see
+// initialize): Live shows a plug-in's parameters only when there are 64 or
+// fewer, and the chain is set in the editor rather than played.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Main",   {0, 1, 2, 3, 4, 77, 78, 79}},          // Swing Master Output Song SongLoop Engine Tone Vel>FM
+    {"Lane 1", {5, 6, 7, 8, 9, 10, 11, 12}},          // Rhythm Kit Level Pan Tune Decay Drive Mute
+    {"Lane 2", {13, 14, 15, 16, 17, 18, 19, 20}},
+    {"Lane 3", {21, 22, 23, 24, 25, 26, 27, 28}},
+    {"Lane 4", {29, 30, 31, 32, 33, 34, 35, 36}},
+    {"Browse", {80, 81, 82, 83, 84, 85, 86, -1}},     // Prev/Next Patch, Prev/Next Fav, Write MIDI, Render Loop, Render Kit
 };
 
 class SeqVST : public SingleComponentEffect {

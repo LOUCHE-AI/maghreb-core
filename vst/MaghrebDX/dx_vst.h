@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "patch_triggers.h"
 #include "triggers.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
@@ -35,6 +36,17 @@ static const int kResetAllId = kNumDsp + 1;
 static const int kTotalParams = kNumDsp + 2;
 // Prev/Next Patch, Prev/Next Favourite: buttons for a controller, never saved.
 static const int kFirstTrigger = kTotalParams;
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Kit",            {0, 1, 2, 3, 4, 5, 6, 7}},         // Kit Tune Decay FM Noise Tone Drive Level
+    {"Feel",           {8, 9, 10, 11, 12, 13, 14, 15}},   // Humanize Spread Vel>FM Vel>Tone Lowpass Highpass Output Stroke
+    {"Stroke",         {16, 17, 18, 19, 20, 21, 27, 28}}, // Freq Ratio Index FMTime Length Bend Gain Pan
+    {"Noise / Browse", {23, 24, 25, 26, 31, 32, 33, 34}}, // Noise NoiseFreq NoiseQ NoiseTime, Prev/Next Patch, Prev/Next Fav
+    {"Bend / Reset",   {22, 29, 30, -1, -1, -1, -1, -1}}, // BendTime ResetStroke ResetKit
+};
 
 class DXVST : public SingleComponentEffect {
 public:

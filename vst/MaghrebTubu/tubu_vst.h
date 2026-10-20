@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "tubu_dsp.h"
 
@@ -32,6 +33,14 @@ extern const char* const kParamHelp[];
 static const int kNumDsp = tubu::kNumParams;
 static const int kRevertId = kNumDsp;          // wrapper-only
 static const int kTotalParams = kNumDsp + 1;
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Tuning", {0, 1, 2, 13, 14, 3, 4, 11}},          // Tab Tonic Mapping Degree Cents Drone DroneLevel Level
+    {"Sound",  {5, 6, 7, 8, 9, 10, 12, 15}},          // Brightness Damping Decay Bow Attack Release Output Revert
+};
 
 class TubuVST : public SingleComponentEffect {
 public:

@@ -27,21 +27,14 @@ const clap_plugin_descriptor_t kDesc = {
     kFeatures,
 };
 
-// Eight knobs a page, for a controller's encoders (a Launchkey in Plugin
-// mode).
-const mclap::RemotePage kPages[] = {
-    {"Tune", {0, 1, 2, 3, 4, 5, 6, 7}},               // Tab Tonic TonicFine Amount Retune Deadzone Mix Output
-    {"Mode", {10, 9, 8, -1, -1, -1, -1, -1}},         // Live Sensitivity Bypass
-};
-
 const mclap::Vst3Spec kSpec = {
     &kDesc,
     Steinberg::Vst::TuneVST::createInstance,
     true,     // takes audio: it corrects a voice
     false,    // and no notes
     false,    // notes out
-    kPages,
-    (int)(sizeof kPages / sizeof kPages[0]),
+    Steinberg::Vst::kKnobPages,     // the knob banks, as Bitwig Remote Controls
+    (int)(sizeof Steinberg::Vst::kKnobPages / sizeof Steinberg::Vst::kKnobPages[0]),
 };
 
 } // namespace

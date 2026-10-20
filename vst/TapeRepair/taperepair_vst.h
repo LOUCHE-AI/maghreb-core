@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "taperepair_dsp.h"
 #include "triggers.h"
@@ -47,6 +48,15 @@ static const int kTotalParams = kNumDsp + 4;
 // The buttons that are not settings, for a controller to press. Never saved.
 static const int kFirstTrigger = kTotalParams;
 enum { kTrigLearn, kTrigRepair, kTrigRevert, kTrigSplit, kTrigSend, kNumTriggers };
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Repair",       {0, 1, 2, 3, 4, 5, 6, 7}},       // Hum Harmonics Denoise Floor DCBlock Normalise Compare Output
+    {"Tape",         {10, 11, 12, 8, 13, 14, 16, 17}},// Play Follow AutoStop Bypass Learn Repair SplitSide Send
+    {"Arm / Revert", {9, 15, -1, -1, -1, -1, -1, -1}},
+};
 
 class TapeRepairVST : public SingleComponentEffect {
 public:

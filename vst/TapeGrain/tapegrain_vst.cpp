@@ -241,7 +241,12 @@ tresult PLUGIN_API TapeGrainVST::initialize(FUnknown* context) {
     // still route audio to an aux bus for Record and Input Mix
     addAudioInput(STR16("Audio In"), SpeakerArr::kStereo, kAux);
 
-    for (int i = 0; i < kTotalParams; i++) {
+    static const char* const kTriggerNames[kNumTriggers] = {"From Tape"};
+    for (int i : mplat::knobOrder(kKnobPages, kFirstTrigger + kNumTriggers)) {
+        if (i >= kFirstTrigger) {
+            mplat::addTriggerParam(parameters, i, kTriggerNames[i - kFirstTrigger]);
+            continue;
+        }
         const ParamDef& p = kParams[i];
         char16 title[128];
         str8ToStr16(title, p.name, 128);
@@ -283,8 +288,6 @@ tresult PLUGIN_API TapeGrainVST::initialize(FUnknown* context) {
             dsp_.setParam(i, (float)p.def);
         }
     }
-    static const char* const kTriggerNames[kNumTriggers] = {"From Tape"};
-    mplat::addTriggerParams(parameters, kFirstTrigger, kTriggerNames, kNumTriggers);
     triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }

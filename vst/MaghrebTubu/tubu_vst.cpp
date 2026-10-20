@@ -127,7 +127,7 @@ tresult PLUGIN_API TubuVST::initialize(FUnknown* context) {
     addEventInput(STR16("MIDI In"), 16);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
 
-    for (int i = 0; i < kTotalParams; i++) {
+    for (int i : mplat::knobOrder(kKnobPages, kTotalParams)) {
         const ParamDef& p = kParams[i];
         char16 title[128];
         str8ToStr16(title, p.name, 128);

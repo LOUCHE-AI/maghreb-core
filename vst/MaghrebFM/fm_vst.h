@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "fm_dsp.h"
 
@@ -31,6 +32,16 @@ static const int kNumDsp = mfm::kNumParams;
 static const int kResetOneId = kNumDsp;       // wrapper-only
 static const int kResetAllId = kNumDsp + 1;
 static const int kTotalParams = kNumDsp + 2;
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Kit",           {0, 1, 2, 3, 4, 5, 6, 7}},          // Kit Tune Decay FM Noise Tone Drive Level
+    {"Feel",          {8, 9, 10, 11, 12, 13, 14, 15}},    // Humanize Spread Vel>FM Vel>Tone Lowpass Highpass Output Stroke
+    {"Stroke",        {16, 17, 18, 19, 20, 21, 27, 28}},  // Freq Ratio Index FMTime Length Bend Gain Pan
+    {"Noise / Reset", {23, 24, 25, 26, 22, 29, 30, -1}},  // Noise NoiseFreq NoiseQ NoiseTime BendTime ResetStroke ResetKit
+};
 
 class FMVST : public SingleComponentEffect {
 public:

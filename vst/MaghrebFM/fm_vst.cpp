@@ -162,7 +162,7 @@ tresult PLUGIN_API FMVST::initialize(FUnknown* context) {
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
 
     const std::vector<ParamDef>& P = params();
-    for (int i = 0; i < (int)P.size(); i++) {
+    for (int i : mplat::knobOrder(kKnobPages, (int)P.size())) {
         const ParamDef& p = P[i];
         char16 title[128];
         str8ToStr16(title, p.name.c_str(), 128);

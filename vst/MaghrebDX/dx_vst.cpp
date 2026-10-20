@@ -163,7 +163,13 @@ tresult PLUGIN_API DXVST::initialize(FUnknown* context) {
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
 
     const std::vector<ParamDef>& P = params();
-    for (int i = 0; i < (int)P.size(); i++) {
+    const char* const* kTriggerNames = mdx::kPatchTriggerNames;
+    const int kNumTriggers = mdx::kNumPatchTriggers;
+    for (int i : mplat::knobOrder(kKnobPages, kFirstTrigger + kNumTriggers)) {
+        if (i >= kFirstTrigger) {
+            mplat::addTriggerParam(parameters, i, kTriggerNames[i - kFirstTrigger]);
+            continue;
+        }
         const ParamDef& p = P[i];
         char16 title[128];
         str8ToStr16(title, p.name.c_str(), 128);
@@ -192,8 +198,6 @@ tresult PLUGIN_API DXVST::initialize(FUnknown* context) {
             dsp_.setParam(i, (float)p.def);
         }
     }
-    mplat::addTriggerParams(parameters, kFirstTrigger, mdx::kPatchTriggerNames,
-                            mdx::kNumPatchTriggers);
     triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "tune_dsp.h"
 #include "tune_params.h"
@@ -26,6 +27,14 @@ inline const std::vector<ParamDef>& params() { return mtune::params(); }
 
 static const int kNumDsp = mtune::kNumParams;
 static const int kTotalParams = kNumDsp;
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Tune", {0, 1, 2, 3, 4, 5, 6, 7}},               // Tab Tonic TonicFine Amount Retune Deadzone Mix Output
+    {"Mode", {10, 9, 8, -1, -1, -1, -1, -1}},         // Live Sensitivity Bypass
+};
 
 class TuneVST : public SingleComponentEffect {
 public:

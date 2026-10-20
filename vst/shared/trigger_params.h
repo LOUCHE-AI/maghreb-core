@@ -10,17 +10,15 @@
 
 namespace mplat {
 
-// On/off parameters with ids firstId, firstId + 1, ... - after every saved
-// parameter, so a plug-in's state code never sees them.
-inline void addTriggerParams(Steinberg::Vst::ParameterContainer& pc, int firstId,
-                             const char* const* names, int n) {
+// One on/off parameter. Its id comes after every saved parameter, so a
+// plug-in's state code never sees it; where it is registered among the others
+// is up to the plug-in's knob banks.
+inline void addTriggerParam(Steinberg::Vst::ParameterContainer& pc, int id, const char* name) {
     using namespace Steinberg;
     using namespace Steinberg::Vst;
-    for (int i = 0; i < n; i++) {
-        char16 title[128];
-        str8ToStr16(title, names[i], 128);
-        pc.addParameter(title, nullptr, 1, 0.0, ParameterInfo::kCanAutomate, firstId + i);
-    }
+    char16 title[128];
+    str8ToStr16(title, name, 128);
+    pc.addParameter(title, nullptr, 1, 0.0, ParameterInfo::kCanAutomate, id);
 }
 
 } // namespace mplat

@@ -116,7 +116,14 @@ tresult PLUGIN_API TapeRepairVST::initialize(FUnknown* context) {
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
 
-    for (int i = 0; i < kTotalParams; i++) {
+    static const char* const kTriggerNames[kNumTriggers] = {
+        "Learn", "Repair", "Revert", "Split Side", "Send to TapeGrain",
+    };
+    for (int i : mplat::knobOrder(kKnobPages, kFirstTrigger + kNumTriggers)) {
+        if (i >= kFirstTrigger) {
+            mplat::addTriggerParam(parameters, i, kTriggerNames[i - kFirstTrigger]);
+            continue;
+        }
         const ParamDef& p = kParams[i];
         char16 title[128];
         str8ToStr16(title, p.name, 128);
@@ -145,10 +152,6 @@ tresult PLUGIN_API TapeRepairVST::initialize(FUnknown* context) {
         }
         if (i < kNumDsp) dsp_.setParam(i, (float)p.def);
     }
-    static const char* const kTriggerNames[kNumTriggers] = {
-        "Learn", "Repair", "Revert", "Split Side", "Send to TapeGrain",
-    };
-    mplat::addTriggerParams(parameters, kFirstTrigger, kTriggerNames, kNumTriggers);
     triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }

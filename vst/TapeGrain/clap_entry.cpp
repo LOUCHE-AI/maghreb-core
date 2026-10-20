@@ -27,25 +27,14 @@ const clap_plugin_descriptor_t kDesc = {
     kFeatures,
 };
 
-// Eight knobs a page, for a controller's encoders (a Launchkey in Plugin
-// mode). Record and Preset stay off them: a nudged knob should not record
-// over a sample or swap every setting for a preset's.
-const mclap::RemotePage kPages[] = {
-    {"Grain",  {0, 1, 2, 3, 4, 5, 6, 7}},             // Position GrainSize Density Pitch Level GrainShape Attack Release
-    {"Spray",  {8, 9, 10, 11, 12, 20, 19, 21}},       // Spray Jitter Reverse PanSpray Focus PitchSpread Drift Freeze
-    {"Motion", {13, 14, 15, 16, 17, 18, 30, 29}},     // Motion ScanRate Span StepRate Affinity Cohesion Agents Rate
-    {"Stems",  {32, 33, 34, 35, 36, 37, 22, 31}},     // Stem Grains StemA-D InputMix Output
-    {"Play",   {23, 24, 25, 26, 27, 28, 40, -1}},     // PadMode Sensitivity SpreadKeys Voicing Sync Tempo FromTape
-};
-
 const mclap::Vst3Spec kSpec = {
     &kDesc,
     Steinberg::Vst::TapeGrainVST::createInstance,
     true,     // audio in
     true,     // notes in
     false,     // notes out
-    kPages,
-    (int)(sizeof kPages / sizeof kPages[0]),
+    Steinberg::Vst::kKnobPages,     // the knob banks, as Bitwig Remote Controls
+    (int)(sizeof Steinberg::Vst::kKnobPages / sizeof Steinberg::Vst::kKnobPages[0]),
 };
 
 } // namespace

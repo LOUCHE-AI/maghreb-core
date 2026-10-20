@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "tubudx_dsp.h"
 #include "patch_triggers.h"
@@ -36,6 +37,14 @@ static const int kRevertId = kNumDsp;          // wrapper-only
 static const int kTotalParams = kNumDsp + 1;
 // Prev/Next Patch, Prev/Next Favourite: buttons for a controller, never saved.
 static const int kFirstTrigger = kTotalParams;
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Tuning", {0, 1, 2, 3, 4, 5, 6, 7}},             // Tab Tonic Mapping Degree Cents Drone DroneLevel Voice
+    {"Patch",  {8, 9, 11, 12, 13, 14, 10, -1}},       // Level Output Prev/Next Patch Prev/Next Fav Revert
+};
 
 class TubuDXVST : public SingleComponentEffect {
 public:

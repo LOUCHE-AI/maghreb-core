@@ -239,6 +239,31 @@ int main(int argc, char** argv) {
         }
         snprintf(msg, sizeof msg, "%u pages", pages);
         ok("its knob pages name only real parameters", real, msg);
+
+        // Ableton has no pages: it hands a controller the visible parameters
+        // eight at a time, in registered order. So that order has to be the
+        // pages exactly, with only the last one short, and there have to be 64
+        // or fewer, or Live shows none of them until they are configured.
+        std::vector<clap_id> flat;
+        bool gapOnlyAtEnd = true;
+        for (uint32_t k = 0; k < pages; k++) {
+            clap_remote_controls_page_t pg{};
+            rc->get(p, k, &pg);
+            for (int c = 0; c < CLAP_REMOTE_CONTROLS_COUNT; c++) {
+                if (pg.param_ids[c] != CLAP_INVALID_ID) flat.push_back(pg.param_ids[c]);
+                else if (k + 1 < pages) gapOnlyAtEnd = false;
+            }
+        }
+        std::vector<clap_id> visible;
+        for (uint32_t i = 0; i < nParams; i++) {
+            clap_param_info_t info{};
+            if (pars->get_info(p, i, &info) && !(info.flags & CLAP_PARAM_IS_HIDDEN))
+                visible.push_back(info.id);
+        }
+        snprintf(msg, sizeof msg, "%zu visible, %zu on the pages", visible.size(), flat.size());
+        ok("and the registered order is those pages, eight at a time",
+           gapOnlyAtEnd && visible == flat, msg);
+        ok("with 64 or fewer showing, so Live shows them unconfigured", visible.size() <= 64, msg);
     }
 
     // ---- buttons: a controller pressing them ----

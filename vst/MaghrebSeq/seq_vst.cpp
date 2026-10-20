@@ -164,7 +164,16 @@ tresult PLUGIN_API SeqVST::initialize(FUnknown* context) {
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
 
     const std::vector<ParamDef>& P = params();
-    for (int i = 0; i < (int)P.size(); i++) {
+    static const char* const kTriggerNames[kNumTriggers] = {
+        mdx::kPatchTriggerNames[0], mdx::kPatchTriggerNames[1],
+        mdx::kPatchTriggerNames[2], mdx::kPatchTriggerNames[3],
+        "Write MIDI", "Render Loop", "Render Kit",
+    };
+    for (int i : mplat::knobOrder(kKnobPages, kFirstTrigger + kNumTriggers)) {
+        if (i >= kFirstTrigger) {
+            mplat::addTriggerParam(parameters, i, kTriggerNames[i - kFirstTrigger]);
+            continue;
+        }
         const ParamDef& p = P[i];
         char16 title[128];
         str8ToStr16(title, p.name.c_str(), 128);
@@ -190,15 +199,16 @@ tresult PLUGIN_API SeqVST::initialize(FUnknown* context) {
             rp->setPrecision(p.precision);
             parameters.addParameter(rp);
         }
+        // The song chain: saved with the plug-in's own state and set in the
+        // editor, but hidden from the host, which keeps the count Live sees
+        // at 47 - under the 64 it will show without being configured.
+        if (i >= mseq::kSection0 && i < mseq::kEngine) {
+            ParameterInfo& in = parameters.getParameter((ParamID)i)->getInfo();
+            in.flags = ParameterInfo::kIsHidden | (in.flags & ParameterInfo::kIsList);
+        }
         cache_[i] = (float)p.def;
         dsp_.setParam(i, (float)p.def);
     }
-    static const char* const kTriggerNames[kNumTriggers] = {
-        mdx::kPatchTriggerNames[0], mdx::kPatchTriggerNames[1],
-        mdx::kPatchTriggerNames[2], mdx::kPatchTriggerNames[3],
-        "Write MIDI", "Render Loop", "Render Kit",
-    };
-    mplat::addTriggerParams(parameters, kFirstTrigger, kTriggerNames, kNumTriggers);
     triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }

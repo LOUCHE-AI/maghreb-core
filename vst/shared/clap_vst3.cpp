@@ -223,6 +223,7 @@ bool CLAP_ABI paramsInfo(const clap_plugin_t* p, uint32_t index, clap_param_info
     if (info.flags & ParameterInfo::kCanAutomate)
         out->flags |= CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE;
     if (info.flags & ParameterInfo::kIsReadOnly) out->flags |= CLAP_PARAM_IS_READONLY;
+    if (info.flags & ParameterInfo::kIsHidden)   out->flags |= CLAP_PARAM_IS_HIDDEN;
     if (info.stepCount > 0) out->flags |= CLAP_PARAM_IS_STEPPED;
     snprintf(out->name, sizeof out->name, "%s", toAscii(info.title).c_str());
     snprintf(out->module, sizeof out->module, "%s", toAscii(info.units).c_str());
@@ -726,7 +727,7 @@ bool CLAP_ABI remoteGet(const clap_plugin_t* p, uint32_t index,
                         clap_remote_controls_page_t* page) {
     const Vst3Spec* s = self(p)->spec;
     if (index >= (uint32_t)s->numPages) return false;
-    const RemotePage& rp = s->pages[index];
+    const mplat::KnobPage& rp = s->pages[index];
     std::memset(page, 0, sizeof *page);
     std::snprintf(page->section_name, sizeof page->section_name, "%s", s->desc->name);
     std::snprintf(page->page_name, sizeof page->page_name, "%s", rp.name);

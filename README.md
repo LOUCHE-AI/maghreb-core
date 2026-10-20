@@ -37,10 +37,15 @@ first. After copying, run this once in Terminal:
 Every knob and switch is a host parameter, so any MIDI controller can be
 mapped to it the usual way. Two things go further:
 
-- **Knob pages.** The CLAP versions hand Bitwig named pages of eight
-  parameters, which turn up on an eight-encoder controller with no mapping -
-  a Novation Launchkey in Plugin mode, for one. Anything that could throw work
-  away (Reset, Revert, Arm, Record, Preset) is kept off them.
+- **Knob banks.** Each plug-in's parameters come in banks of eight, so an
+  eight-encoder controller turns them with no mapping - a Novation Launchkey
+  in Plugin mode, or a Launchpad's Device mode. In Ableton Live (any system)
+  that is the order the parameters are registered in, which Live hands the
+  controller eight at a time; in Bitwig the CLAP versions give the same banks
+  as named Remote Controls pages. Anything that could throw work away (Reset,
+  Revert, Arm, Record, Preset) is in the last bank. MaghrebSeq's song-chain
+  slots are hidden from the host, which keeps it under the 64 parameters Live
+  will show without configuring; they are still saved with the Set.
 - **Buttons.** What used to be only on screen is a parameter too, for a pad to
   press: Prev/Next Patch and Prev/Next Favourite (MaghrebDX, TubuDX,
   MaghrebSeq), Write MIDI, Render Loop, Render Kit (MaghrebSeq), Learn, Repair,

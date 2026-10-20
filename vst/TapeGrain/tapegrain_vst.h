@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "knob_pages.h"
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 #include "tapegrain_dsp.h"
 #include "triggers.h"
@@ -51,6 +52,18 @@ static const int kTotalParams = kNumDsp + 2;
 // FROM TAPE, as a button a controller can press. Never saved.
 static const int kFirstTrigger = kTotalParams;
 enum { kTrigFromTape, kNumTriggers };
+
+// The knobs, eight to a bank (shared/knob_pages.h). This order is the one
+// Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
+// Anything that can throw work away comes last, a page-turn from the knobs.
+static const mplat::KnobPage kKnobPages[] = {
+    {"Grain",  {0, 1, 2, 3, 4, 5, 6, 7}},             // Position GrainSize Density Pitch Level GrainShape Attack Release
+    {"Spray",  {8, 9, 10, 11, 12, 20, 19, 21}},       // Spray Jitter Reverse PanSpray Focus PitchSpread Drift Freeze
+    {"Motion", {13, 14, 15, 16, 17, 18, 30, 29}},     // Motion ScanRate Span StepRate Affinity Cohesion Agents Rate
+    {"Stems",  {32, 33, 34, 35, 36, 37, 22, 31}},     // Stem Grains StemA-D InputMix Output
+    {"Play",   {23, 24, 25, 26, 27, 28, 40, 38}},     // PadMode Sensitivity SpreadKeys Voicing Sync Tempo FromTape Record
+    {"Preset", {39, -1, -1, -1, -1, -1, -1, -1}},
+};
 
 class TapeGrainVST : public SingleComponentEffect {
 public:

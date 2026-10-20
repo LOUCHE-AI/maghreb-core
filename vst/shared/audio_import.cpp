@@ -1,10 +1,12 @@
 #include "audio_import.h"
 #include "wav_io.h"
 
+#if !defined(_WIN32)
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -13,7 +15,9 @@
 #include <cstring>
 #include <filesystem>
 
+#if !defined(_WIN32)
 extern char** environ;
+#endif
 
 namespace maudio {
 namespace fs = std::filesystem;
@@ -30,6 +34,9 @@ std::string lowerExt(const std::string& path) {
 }
 
 std::string onPath(const char* name) {
+#if defined(_WIN32)
+    (void)name; return {}; // ponytail: no ffmpeg on Windows yet, so WAV only
+#else
     const char* p = std::getenv("PATH");
     if (!p) return {};
     const std::string path(p);
@@ -47,12 +54,16 @@ std::string onPath(const char* name) {
         start = colon + 1;
     }
     return {};
+#endif
 }
 
 void setErr(std::string* err, const std::string& m) { if (err) *err = m; }
 
 // Runs a command to completion, quietly. Used only for ffmpeg.
 bool run(const std::vector<std::string>& argv) {
+#if defined(_WIN32)
+    (void)argv; return false;
+#else
     std::vector<char*> c;
     c.reserve(argv.size() + 1);
     for (const auto& a : argv) c.push_back(const_cast<char*>(a.c_str()));
@@ -71,6 +82,7 @@ bool run(const std::vector<std::string>& argv) {
     int status = 0;
     if (waitpid(pid, &status, 0) < 0) return false;
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#endif
 }
 
 } // anonymous

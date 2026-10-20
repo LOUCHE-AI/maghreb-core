@@ -5,6 +5,11 @@
 # The SDK's hosting helpers come along because this module does host a VST3
 # component - its own - so it needs the parts of the SDK that a host uses.
 function(add_clap_target vst3target)
+    # The editor is embedded through X11 only (shared/clap_vst3.cpp), so the
+    # CLAP is Linux-only; Windows and macOS get the VST3.
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        return()
+    endif()
     set(_sdk "${CMAKE_CURRENT_SOURCE_DIR}/../sdk")
     get_target_property(_src ${vst3target} SOURCES)
 

@@ -1,0 +1,87 @@
+# Builds all eight plug-ins on Linux, Windows and macOS. A pushed tag (v*)
+# also attaches the three zips to a GitHub release of that name.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 rather than latest: the plug-ins then load on any distro
+          # with glibc 2.35 or newer, not only the newest ones.
+          - { os: ubuntu-22.04,   name: linux-x86_64 }
+          - { os: windows-latest, name: windows-x64 }
+          - { os: macos-latest,   name: macos-universal }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages and CLAP headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev \
+            libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
+            libfreetype-dev libcairo2-dev libpango1.0-dev libsqlite3-dev libxcb-keysyms1-dev
+          git clone --depth 1 --branch 1.2.10 https://github.com/free-audio/clap.git "$RUNNER_TEMP/clap"
+          echo "CXXFLAGS=-I$RUNNER_TEMP/clap/include" >> "$GITHUB_ENV"
+
+      - name: VST3 SDK
+        run: |
+          git clone --recursive --depth 1 --shallow-submodules --branch v3.8.1_build_84 \
+            https://github.com/steinbergmedia/vst3sdk.git vst/sdk
+
+      # The patch is to VSTGUI's X11 backend, which only Linux compiles.
+      - name: VSTGUI patch
+        if: runner.os == 'Linux'
+        run: cd vst/sdk/vstgui4 && patch -p1 < ../../patches/vstgui-keep-x-connection.patch
+
+      - name: Build
+        run: |
+          for p in MaghrebDX MaghrebFM MaghrebSeq MaghrebTubu MaghrebTune TapeGrain TapeRepair TubuDX; do
+            cmake -S vst/$p -B build/$p -DCMAKE_BUILD_TYPE=Release \
+              -DVSTGUI_STANDALONE=OFF -DVSTGUI_TOOLS=OFF
+            cmake --build build/$p --config Release --parallel 4
+          done
+
+      - name: Package
+        run: |
+          mkdir -p out/VST3
+          cp -R build/*/VST3/Release/*.vst3 out/VST3/
+          if [ "$RUNNER_OS" = Linux ]; then
+            mkdir -p out/CLAP && cp build/*/lib/Release/*.clap out/CLAP/
+          fi
+          cp LICENSE vst/NOTICE.txt out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maghreb-instruments-${{ matrix.name }}
+          path: out
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Zip and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for d in maghreb-instruments-*; do (cd "$d" && zip -qr "../$d.zip" .); done
+          gh release create "$GITHUB_REF_NAME" maghreb-instruments-*.zip \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" \
+            --notes "Download the zip for your system and see the README for where the files go."

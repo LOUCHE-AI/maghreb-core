@@ -19,11 +19,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # own targets: a universal plug-in linked against a single-architecture SDK
 # will not link at all.
 #
-# 10.13 is what the VST3 SDK itself asks for. Both architectures are built so
+# 10.15, not the SDK's own 10.13: std::filesystem needs it. Both architectures are built so
 # one bundle runs on Apple silicon and on Intel; drop x86_64 if that is not
 # wanted, but do it here rather than per target.
 if(APPLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "" FORCE)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()
 

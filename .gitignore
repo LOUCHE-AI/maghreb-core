@@ -1,0 +1,16 @@
+# The VST3 SDK is fetched, not vendored (see README). No trailing slash, so a
+# symlink to an existing checkout is ignored too.
+/vst/sdk
+
+# build output
+build/
+*/build/
+
+# files the tests write next to themselves
+*.wav
+*.syx
+*.mkit
+*.tgset
+
+.DS_Store
+__pycache__/

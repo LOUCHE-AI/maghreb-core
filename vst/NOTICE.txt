@@ -1,0 +1,100 @@
+THIRD PARTY NOTICES
+===================
+
+This file lists code in these plug-ins that someone else wrote, under what
+licence, and what was changed. It exists because two of those licences require
+it, and because a buyer or a distributor may ask.
+
+Last checked: 17 August 2026, against the sources in this tree.
+
+
+1. VST 3 SDK  --  MIT License
+------------------------------
+Steinberg Media Technologies GmbH.  Version 3.8.1 (pluginterfaces/vst/vsttypes.h).
+
+The SDK in this tree is MIT licensed. Steinberg's own README states plainly:
+
+    "Licensing under GPLv3 and the Steinberg proprietary license is no longer
+     available."
+    "Code licensed under MIT license can be used, modified, and redistributed
+     freely - including in commercial products - provided MIT license terms are
+     followed."
+
+So a closed-source commercial plug-in built on it needs no separate agreement
+with Steinberg. Keep the MIT text (sdk/LICENSE.txt) in the distribution.
+
+NOTE: "VST" is a Steinberg trademark. The MIT licence covers the code, not the
+name or the logo. Check Steinberg's current trademark guidelines before using
+either in marketing copy.
+
+
+2. VSTGUI  --  BSD-style, 3 clause
+-----------------------------------
+(c) 2022 Steinberg Media Technologies. See sdk/vstgui4/LICENSE.
+
+Redistribution in binary form must reproduce the copyright notice, the list of
+conditions and the disclaimer in the documentation or other materials shipped
+with the product. Putting the text of sdk/vstgui4/LICENSE into an "About" or a
+bundled licences file satisfies this.
+
+
+3. msfa  --  Apache License 2.0
+--------------------------------
+Copyright 2012 Google Inc.
+Copyright 2016-2025 Pascal Gauthier.
+
+Vendored in MaghrebDX/msfa, MaghrebSeq/msfa and TubuDX/msfa. It is the DSP core
+of Dexed, and it is deliberately licensed apart from the rest of that project.
+Dexed's own README:
+
+    "Dexed is licensed on the GPL v3, while the msfa component (acronym for
+     music synthesizer for android) stays on the Apache 2.0 license to be able
+     to collaborate between projects."
+
+Only msfa is used here. No GPL-licensed Dexed code is included, so the GPL does
+not reach these plug-ins.
+
+Apache 2.0 requires, for a binary distribution: a copy of the licence, the
+retained copyright notices (they are in every msfa source file), and a
+statement of what was changed. The changes are:
+
+  * msfa/dx7note.cc  --  Dx7Note::fb_buf_ is zeroed in the constructor and in
+    init(). Upstream never writes it before FmCore::render reads it, so
+    operator 6's feedback begins from whatever was in memory. Marked in the
+    source as "LOCAL CHANGE (not upstream)".
+
+  * The three copies have diverged from each other by addition only (TubuDX's
+    engine wrapper gained noteOff and setTuningTable). No upstream msfa file
+    differs between them other than as noted above.
+
+  * Nothing was removed. msfa/tuning.cc is a reduced stand-in for Dexed's
+    MTS-ESP tuning support, written for this project rather than derived from
+    Dexed's version; msfa/libMTSClient.h is a stub with the same purpose.
+
+The Apache 2.0 text sits next to each copy as msfa/LICENSE-msfa-Apache-2.0.txt.
+
+
+4. The rhythms  --  needs a decision before selling
+----------------------------------------------------
+The 90 rhythms in seq_data.h were taken from the Maghreb Seq Move module, whose
+own description credits them:
+
+    "Rhythms from Jas's Middle Eastern Rhythms List."
+
+The rhythms themselves are traditional and are not anyone's property. A curated
+list of them can be a different matter: in most jurisdictions a compilation can
+carry its own thin copyright in the selection and arrangement, separate from
+the items compiled.
+
+This has not been resolved and should be before money changes hands. The
+options, roughly in order of effort:
+
+  a. Ask. A short mail explaining what it is for often settles it, and a credit
+     line costs nothing.
+  b. Credit the source in the plug-in and its documentation regardless.
+  c. Re-derive the set from primary sources - published ethnomusicology,
+     recordings, players - so the selection is your own.
+
+Nothing else in the tree is third-party. The DSP, the stroke tables, the ṭubūʿ
+tunings and the module data are from Waèl's own Move modules, which name him as
+author in their module.json.

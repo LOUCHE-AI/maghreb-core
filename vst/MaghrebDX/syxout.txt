@@ -1,0 +1,12 @@
+PASS   a 32-voice cartridge reads back  32 voices
+PASS   every byte of every voice survives packing and unpacking  0 mismatched bytes of 4960
+PASS   voice names come back, trimmed  "BRASS   1", "E.PIANO 1"
+PASS   the decoded voices play through the engine  8 of 8 made a sound
+PASS   and none of them produces NaN or inf
+PASS   a sysex file that is not a DX7 cartridge is refused  0 voices from a Novation firmware dump
+PASS   a missing file is refused
+PASS   an empty path is refused
+PASS   a cartridge cut in half is refused rather than half-read  0 voices
+PASS   a header that is not at the start of the file is still found  32 voices past nine bytes of junk
+
+all good

@@ -1,0 +1,67 @@
+--- a/vstgui/lib/platform/linux/x11platform.cpp
++++ b/vstgui/lib/platform/linux/x11platform.cpp
+@@ -126,9 +126,29 @@
+ 	{
+ 		if (++useCount != 1)
+ 			return;
+-		int screenNo;
+-		xcbConnection = xcb_connect (nullptr, &screenNo);
++		// The connection is made once and kept for the life of the process.
++		//
++		// It used to be dropped whenever the last editor closed and remade on
++		// the next open. Cairo caches a device per xcb connection, so the
++		// reopened editor got handed a screen belonging to a connection that
++		// no longer existed, and cairo aborts on that:
++		//
++		//   cairo-xcb-screen.c:219: _get_screen_index: Assertion `!"reached"'
++		//
++		// which in a plug-in host is the whole process going down - the window
++		// that "disappears" the second time you open it. One connection held
++		// open costs a file descriptor; reconnecting costs the process.
++		if (!xcbConnection)
++		{
++			int screenNo;
++			xcbConnection = xcb_connect (nullptr, &screenNo);
++			initScreenResources (screenNo);
++		}
+ 		RunLoop::get ()->registerEventHandler (xcb_get_file_descriptor (xcbConnection), this);
++	}
++
++	void initScreenResources (int screenNo)
++	{
+ 		auto screen = xcb_aux_get_screen (xcbConnection, screenNo);
+ 		xcb_cursor_context_new (xcbConnection, screen, &cursorContext);
+ 
+@@ -165,28 +185,10 @@
+ 		if (--useCount != 0)
+ 			return;
+ 
+-		if (xcbConnection)
+-		{
+-			if (xkbUnprocessedState)
+-				xkb_state_unref (xkbUnprocessedState);
+-			if (xkbState)
+-				xkb_state_unref (xkbState);
+-			if (xkbKeymap)
+-				xkb_keymap_unref (xkbKeymap);
+-			if (xkbContext)
+-				xkb_context_unref (xkbContext);
+-			if (cursorContext)
+-			{
+-				for (auto c : cursors)
+-				{
+-					if (c != XCB_CURSOR_NONE)
+-						xcb_free_cursor (xcbConnection, c);
+-				}
+-				xcb_cursor_context_free (cursorContext);
+-			}
+-
+-			xcb_disconnect (xcbConnection);
+-		}
++		// The event handler goes, because the run loop it was registered with
++		// belongs to the editor that is closing. Everything built on the
++		// connection - cursors, keymap, the connection itself - stays, and is
++		// picked up again by the next init(). See the note there.
+ 		RunLoop::get ()->unregisterEventHandler (this);
+ 	}
+ 

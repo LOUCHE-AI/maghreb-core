@@ -1,0 +1,9 @@
+Mujannab - Bitwig Micro-pitch offsets, in cents
+Generated from tubu_tuning.h.
+
+degrees: 0, 150, 300, 500, 650, 800, 1000
+
+D   -50
+G   -50
+
+Every key not listed stays at 0.

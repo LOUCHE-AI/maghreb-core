@@ -1,0 +1,8 @@
+Asbaayn - Bitwig Micro-pitch offsets, in cents
+Generated from tubu_tuning.h.
+
+degrees: 0, 150, 300, 500, 700, 800, 1100
+
+D   -50
+
+Every key not listed stays at 0.

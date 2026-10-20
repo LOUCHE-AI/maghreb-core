@@ -1,0 +1,11 @@
+34 cartridges read, 0 refused, 1088 voices decoded
+  2 voices with a non-printable name
+  0 voices that made no sound
+  0 voices that produced NaN or inf
+
+2.syx:
+  Kick-SnrC2  Toms C3-C4  Snare Snap  Snare Shot 
+  Open HiHat  Close Hat   Bass Drum1  Bass Drum2 
+  W.Block 1   Finger Clp  Agogo       Castenet   
+  Hard Tamb   Soft Tamb   Triangle    Timbali    
+ 

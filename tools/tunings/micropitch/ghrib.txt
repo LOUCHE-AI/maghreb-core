@@ -1,0 +1,11 @@
+Ghrib - Bitwig Micro-pitch offsets, in cents
+Generated from tubu_tuning.h.
+
+degrees: 0, 150, 350, 500, 700, 850, 1050
+
+D   -50
+E   -50
+A   -50
+B   -50
+
+Every key not listed stays at 0.

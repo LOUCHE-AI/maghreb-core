@@ -1,0 +1,8 @@
+Rasd - Bitwig Micro-pitch offsets, in cents
+Generated from tubu_tuning.h.
+
+degrees: 0, 200, 400, 500, 700, 800, 1000
+
+(no offsets - this tabʿ is plain 12-TET)
+
+Every key not listed stays at 0.

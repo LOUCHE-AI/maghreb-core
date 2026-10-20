@@ -11,8 +11,8 @@
 // has no honest Windows equivalent short of CreateProcess and overlapped
 // pipes; saying so is better than pretending the button works.
 #include <io.h>
-#define access _access
-#define X_OK 0  // _access can only test existence
+#define access _waccess  // path::c_str() is wchar_t on Windows
+#define X_OK 0  // _waccess can only test existence
 #else
 #include <spawn.h>
 #include <unistd.h>

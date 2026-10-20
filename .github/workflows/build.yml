@@ -51,8 +51,10 @@ jobs:
         run: |
           # Keep going past a failure so one run shows every plug-in's errors.
           fail=0
+          # The SDK's Objective-C++ parts only configure under the Xcode generator.
+          gen=(); [ "$RUNNER_OS" = macOS ] && gen=(-G Xcode)
           for p in MaghrebDX MaghrebFM MaghrebSeq MaghrebTubu MaghrebTune TapeGrain TapeRepair TubuDX; do
-            { cmake -S vst/$p -B build/$p -DCMAKE_BUILD_TYPE=Release &&
+            { cmake -S vst/$p -B build/$p "${gen[@]}" -DCMAKE_BUILD_TYPE=Release &&
               cmake --build build/$p --config Release --parallel 4; } || { echo "::error::$p failed"; fail=1; }
           done
           exit $fail
@@ -74,7 +76,9 @@ jobs:
           path: out
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # always(): GitHub's Mac runners are sometimes too busy to start; the
+    # Linux and Windows zips should not wait on that.
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     permissions:

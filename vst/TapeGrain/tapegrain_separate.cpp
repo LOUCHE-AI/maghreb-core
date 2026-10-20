@@ -10,9 +10,6 @@
 // Not wired up on Windows yet. Everything below is POSIX process handling and
 // has no honest Windows equivalent short of CreateProcess and overlapped
 // pipes; saying so is better than pretending the button works.
-#include <io.h>
-#define access _waccess  // path::c_str() is wchar_t on Windows
-#define X_OK 0  // _waccess can only test existence
 #else
 #include <spawn.h>
 #include <unistd.h>
@@ -29,21 +26,39 @@ namespace fs = std::filesystem;
 
 bool runs(const std::vector<std::string>& argv);
 
+// Windows has no execute bit to ask about; a regular file is as close as it gets.
+bool isExecutable(const fs::path& p) {
+    std::error_code ec;
+#if defined(_WIN32)
+    return fs::is_regular_file(p, ec);
+#else
+    return fs::exists(p, ec) && ::access(p.c_str(), X_OK) == 0;
+#endif
+}
+
 // Is there an executable of this name on PATH?
 std::string onPath(const char* name) {
     const char* p = std::getenv("PATH");
     if (!p) return {};
+#if defined(_WIN32)
+    const char sep = ';';
+#else
+    const char sep = ':';
+#endif
     std::string path(p), item;
     size_t start = 0;
     while (start <= path.size()) {
-        const size_t colon = path.find(':', start);
+        const size_t colon = path.find(sep, start);
         item = path.substr(start, colon == std::string::npos ? std::string::npos
                                                              : colon - start);
         if (!item.empty()) {
-            std::error_code ec;
             const fs::path cand = fs::path(item) / name;
-            if (fs::exists(cand, ec) && ::access(cand.c_str(), X_OK) == 0)
-                return cand.string();
+            if (isExecutable(cand)) return cand.string();
+#if defined(_WIN32)
+            fs::path exe = cand;
+            exe += ".exe";
+            if (isExecutable(exe)) return exe.string();
+#endif
         }
         if (colon == std::string::npos) break;
         start = colon + 1;
@@ -59,6 +74,7 @@ std::string onPath(const char* name) {
 // separates in under four seconds with it. A host is not going to be launched
 // with that set, and a machine without MIOpen ignores it, so the child is
 // handed it here rather than the user being asked to arrange it.
+#if !defined(_WIN32)
 std::vector<std::string> childEnvironment() {
     std::vector<std::string> env;
     bool hasFindMode = false;
@@ -69,6 +85,7 @@ std::vector<std::string> childEnvironment() {
     if (!hasFindMode) env.emplace_back("MIOPEN_FIND_MODE=FAST");
     return env;
 }
+#endif
 
 // The last non-empty line of whatever the child printed - Demucs draws a
 // progress bar, and its last line is the most informative thing available
@@ -112,14 +129,12 @@ std::vector<std::string> demucsCommand() {
     // interpreter, so without looking here the usual install is invisible -
     // which is exactly what happened the first time.
     {
-        std::error_code ec;
         fs::path base;
         if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x) base = x;
         else if (const char* h = std::getenv("HOME"); h && *h) base = fs::path(h) / ".local" / "share";
         if (!base.empty()) {
             const fs::path cand = base / "TapeGrain" / "venv" / "bin" / "demucs";
-            if (fs::exists(cand, ec) && ::access(cand.c_str(), X_OK) == 0)
-                return {cand.string()};
+            if (isExecutable(cand)) return {cand.string()};
         }
     }
 

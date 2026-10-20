@@ -35,7 +35,8 @@ jobs:
             libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev \
             libfreetype-dev libcairo2-dev libpango1.0-dev libgtkmm-3.0-dev libsqlite3-dev libxcb-keysyms1-dev
           git clone --depth 1 --branch 1.2.10 https://github.com/free-audio/clap.git "$RUNNER_TEMP/clap"
-          echo "CXXFLAGS=-I$RUNNER_TEMP/clap/include" >> "$GITHUB_ENV"
+          # find_path(clap/clap.h) in shared/clap_target.cmake searches <prefix>/include
+          echo "CMAKE_PREFIX_PATH=$RUNNER_TEMP/clap" >> "$GITHUB_ENV"
 
       - name: VST3 SDK
         run: |

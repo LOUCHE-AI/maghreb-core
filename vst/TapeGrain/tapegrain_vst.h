@@ -31,6 +31,10 @@ struct ParamDef {
     const char* unit;          // "ms", "%", "dB", "st" ... "" for enums
     double dispLo, dispHi;     // displayed value at lo and at hi
     int precision;             // decimals shown
+    // Travel curve: plain = lo + n^curve * (hi - lo). 1 is linear. Above 1
+    // spends more of the knob on the low end, which a range spanning three
+    // orders of magnitude (5 ms grains to 10 s ones) needs.
+    double curve = 1.0;
 };
 
 extern const ParamDef kParams[];

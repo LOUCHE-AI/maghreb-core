@@ -62,7 +62,9 @@ const ParamDef kParams[] = {
 //   name            lo      hi     def  steps  names                   unit    dispLo dispHi prec
     // a fraction of the buffer: people think in percent, not in 0.25
     {"Position",     0.0,   1.0,   0.25, 0,  ENUM,                      "%",    0.0,   100.,  1},
-    {"Grain Size",   5.0,   2000., 180., 0,  ENUM,                      "ms",   5.0,   2000., 0},
+    // up to ten seconds, on a cubed curve so short grains keep their travel:
+    // 180 ms sits a quarter of the way up and the old 2 s ceiling past half
+    {"Grain Size",   5.0,  10000., 180., 0,  ENUM,                      "ms",   5.0,  10000., 0, 3.0},
     // grains per second, which is what a rate in Hz means here
     {"Density",      0.5,   150.,  30.,  0,  ENUM,                      "Hz",   0.5,   150.,  1},
     // whole semitones: anything finer is Pitch Spread's job
@@ -123,7 +125,7 @@ const ParamDef kParams[] = {
 
 const char* const kParamHelp[] = {
 /*Position*/    "Where in the sample grains are taken from. Every motion mode travels out from here. Drag the waveform to set it.",
-/*Grain Size*/  "Length of each grain. Short is granular texture; long behaves more like a loop.",
+/*Grain Size*/  "Length of each grain, 5 ms to 10 s. Short is granular texture; long behaves more like a loop.",
 /*Density*/     "How many grains start each second. High values overlap into a continuous cloud.",
 /*Pitch*/       "Transposes the grains. Independent of Scan Rate, so pitch and travel speed stay separate.",
 /*Level*/       "Level of the grain cloud itself, before Output.",
@@ -166,9 +168,42 @@ const char* const kParamHelp[] = {
 static_assert(sizeof(kParamHelp) / sizeof(kParamHelp[0]) == kTotalParams,
               "every parameter needs a line of help");
 
+static inline double curveOut(const ParamDef& p, double n) {
+    n = std::max(0.0, std::min(1.0, n));
+    return p.curve == 1.0 ? n : std::pow(n, p.curve);
+}
+static inline double curveIn(const ParamDef& p, double t) {
+    t = std::max(0.0, std::min(1.0, t));
+    return p.curve == 1.0 ? t : std::pow(t, 1.0 / p.curve);
+}
+
+// The host's view of a curved parameter. RangeParameter maps linearly, so
+// without this Live would show 2500 ms where the engine is playing 400.
+class CurvedRangeParameter : public RangeParameter {
+public:
+    CurvedRangeParameter(const TChar* title, ParamID tag, const TChar* units,
+                         ParamValue lo, ParamValue hi, ParamValue def,
+                         int32 flags, const ParamDef& d)
+        : RangeParameter(title, tag, units, lo, hi, def, 0, flags), d_(d) {
+        // the base constructor normalised the default before this class
+        // existed, i.e. linearly - redo it on the curve
+        info.defaultNormalizedValue = toNormalized(def);
+        setNormalized(info.defaultNormalizedValue);
+    }
+    ParamValue toPlain(ParamValue n) const SMTG_OVERRIDE {
+        return getMin() + curveOut(d_, n) * (getMax() - getMin());
+    }
+    ParamValue toNormalized(ParamValue v) const SMTG_OVERRIDE {
+        const double span = getMax() - getMin();
+        return span > 0 ? curveIn(d_, (v - getMin()) / span) : 0.0;
+    }
+private:
+    const ParamDef& d_;
+};
+
 static inline double denorm(int id, double n) {
     const ParamDef& p = kParams[id];
-    double v = p.lo + n * (p.hi - p.lo);
+    double v = p.lo + curveOut(p, n) * (p.hi - p.lo);
     if (p.steps > 0) {
         // Snap to the value the host is displaying. Without this a stepped
         // parameter reads as one thing and reaches the engine as another -
@@ -180,7 +215,7 @@ static inline double denorm(int id, double n) {
 }
 static inline double norm(int id, double v) {
     const ParamDef& p = kParams[id];
-    return (v - p.lo) / (p.hi - p.lo);
+    return curveIn(p, (v - p.lo) / (p.hi - p.lo));
 }
 
 FUnknown* TapeGrainVST::createInstance(void*) {
@@ -230,10 +265,14 @@ tresult PLUGIN_API TapeGrainVST::initialize(FUnknown* context) {
             char16 units[64];
             str8ToStr16(units, p.unit, 64);
             const double dispDef = p.dispLo +
-                norm(i, p.def) * (p.dispHi - p.dispLo);
-            auto* rp = new RangeParameter(title, i, p.unit[0] ? units : nullptr,
-                                          p.dispLo, p.dispHi, dispDef, p.steps,
-                                          ParameterInfo::kCanAutomate);
+                curveOut(p, norm(i, p.def)) * (p.dispHi - p.dispLo);
+            RangeParameter* rp = (p.curve != 1.0)
+                ? new CurvedRangeParameter(title, i, p.unit[0] ? units : nullptr,
+                                           p.dispLo, p.dispHi, dispDef,
+                                           ParameterInfo::kCanAutomate, p)
+                : new RangeParameter(title, i, p.unit[0] ? units : nullptr,
+                                     p.dispLo, p.dispHi, dispDef, p.steps,
+                                     ParameterInfo::kCanAutomate);
             rp->setPrecision(p.precision);
             parameters.addParameter(rp);
         }

@@ -11,7 +11,6 @@
 #include "dx_patch.h"
 #include "midi_write.h"
 #include "wav_io.h"
-#include "platform.h"
 
 #include <cmath>
 #include <cstdio>
@@ -31,7 +30,13 @@ inline std::string stampedName(const MaghrebSeq& dsp, const char* what,
         if (dsp.laneEnabled(0, lane)) { rhythm = kRhythmNames[dsp.rhythmOf(lane)]; break; }
 
     char stamp[32];
-    const std::tm tm = mplat::localTime(std::time(nullptr));
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    #if defined(_WIN32)
+    localtime_s(&tm, &t);
+    #else
+    localtime_r(&t, &tm);
+    #endif
     std::strftime(stamp, sizeof stamp, "%Y-%m-%d %H%M%S", &tm);
 
     char name[256];

@@ -1,14 +1,20 @@
 #include "audio_import.h"
 #include "wav_io.h"
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
-#else
-#include <process.h>
-#define getpid _getpid
+extern char** environ;
 #endif
 
 #include <algorithm>
@@ -17,10 +23,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-
-#if !defined(_WIN32)
-extern char** environ;
-#endif
 
 namespace maudio {
 namespace fs = std::filesystem;
@@ -36,36 +38,105 @@ std::string lowerExt(const std::string& path) {
     return e;
 }
 
-std::string onPath(const char* name) {
+// Windows has no execute bit to ask about; a regular file is as close as it gets.
+bool isExecutable(const fs::path& p) {
+    std::error_code ec;
 #if defined(_WIN32)
-    (void)name; return {}; // ponytail: no ffmpeg on Windows yet, so WAV only
+    return fs::is_regular_file(p, ec);
 #else
+    return fs::exists(p, ec) && ::access(p.c_str(), X_OK) == 0;
+#endif
+}
+
+std::string onPath(const char* name) {
     const char* p = std::getenv("PATH");
     if (!p) return {};
+#if defined(_WIN32)
+    const char sep = ';';
+#else
+    const char sep = ':';
+#endif
     const std::string path(p);
     size_t start = 0;
     while (start <= path.size()) {
-        const size_t colon = path.find(':', start);
+        const size_t colon = path.find(sep, start);
         const std::string item = path.substr(
             start, colon == std::string::npos ? std::string::npos : colon - start);
         if (!item.empty()) {
-            std::error_code ec;
             const fs::path cand = fs::path(item) / name;
-            if (fs::exists(cand, ec) && ::access(cand.c_str(), X_OK) == 0) return cand.string();
+            if (isExecutable(cand)) return cand.string();
+#if defined(_WIN32)
+            fs::path exe = cand;
+            exe += ".exe";
+            if (isExecutable(exe)) return exe.string();
+#endif
         }
         if (colon == std::string::npos) break;
         start = colon + 1;
     }
     return {};
-#endif
 }
 
 void setErr(std::string* err, const std::string& m) { if (err) *err = m; }
 
+#if defined(_WIN32)
+std::wstring widen(const std::string& s) {
+    if (s.empty()) return {};
+    // Paths reach here as UTF-8 from the editor; fall back to the ANSI code
+    // page for anything that is not valid UTF-8 (fs::path::string() output).
+    UINT cp = CP_UTF8;
+    int n = MultiByteToWideChar(cp, MB_ERR_INVALID_CHARS, s.data(), (int)s.size(), nullptr, 0);
+    if (n <= 0) { cp = CP_ACP; n = MultiByteToWideChar(cp, 0, s.data(), (int)s.size(), nullptr, 0); }
+    std::wstring w((size_t)n, L'\0');
+    MultiByteToWideChar(cp, 0, s.data(), (int)s.size(), w.data(), n);
+    return w;
+}
+
+// One argument quoted the way CommandLineToArgvW reads it back: backslashes
+// are literal unless they precede a quote, and then they have to be doubled.
+void appendQuoted(std::wstring& cmd, const std::wstring& arg) {
+    if (!cmd.empty()) cmd += L' ';
+    if (!arg.empty() && arg.find_first_of(L" \t\n\v\"") == std::wstring::npos) { cmd += arg; return; }
+    cmd += L'"';
+    for (size_t i = 0;; ++i) {
+        size_t slashes = 0;
+        while (i < arg.size() && arg[i] == L'\\') { ++i; ++slashes; }
+        if (i == arg.size()) { cmd.append(slashes * 2, L'\\'); break; }
+        if (arg[i] == L'"') { cmd.append(slashes * 2 + 1, L'\\'); cmd += L'"'; }
+        else                { cmd.append(slashes, L'\\'); cmd += arg[i]; }
+    }
+    cmd += L'"';
+}
+#endif
+
 // Runs a command to completion, quietly. Used only for ffmpeg.
 bool run(const std::vector<std::string>& argv) {
 #if defined(_WIN32)
-    (void)argv; return false;
+    if (argv.empty()) return false;
+    std::wstring cmd;
+    for (const auto& a : argv) appendQuoted(cmd, widen(a));
+
+    SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
+    HANDLE nul = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, nullptr);
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = si.hStdOutput = si.hStdError = nul;
+
+    PROCESS_INFORMATION pi{};
+    const std::wstring exe = widen(argv[0]);
+    const BOOL ok = CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, TRUE,
+                                   CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
+    if (!ok) return false;
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return code == 0;
 #else
     std::vector<char*> c;
     c.reserve(argv.size() + 1);
@@ -85,6 +156,14 @@ bool run(const std::vector<std::string>& argv) {
     int status = 0;
     if (waitpid(pid, &status, 0) < 0) return false;
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#endif
+}
+
+unsigned long processId() {
+#if defined(_WIN32)
+    return (unsigned long)GetCurrentProcessId();
+#else
+    return (unsigned long)::getpid();
 #endif
 }
 
@@ -178,7 +257,7 @@ bool importAudio(const std::string& path, std::vector<std::vector<float>>& out,
     }
 
     const fs::path tmp = fs::temp_directory_path() /
-                         ("taperepair-import-" + std::to_string(::getpid()) + ".wav");
+                         ("taperepair-import-" + std::to_string(processId()) + ".wav");
     fs::remove(tmp, ec);
 
     const std::string rateArg = std::to_string((int)std::llround(targetRate > 0 ? targetRate : 48000));

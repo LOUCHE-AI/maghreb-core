@@ -75,7 +75,8 @@ libcairo2-dev libgtkmm-3.0-dev libsqlite3-dev libxcb-keysyms1-dev`), and the
        cp vst/MaghrebTune/build/lib/Release/MaghrebTune.clap ~/.clap/
 
 If the CLAP headers are not installed system-wide, add
-`-DCMAKE_CXX_FLAGS=-I/path/to/clap/include` to the first cmake line.
+`-DCLAP_INCLUDE_DIR=/path/to/clap/include` to the first cmake line; without
+them only the VST3 is built.
 
 On Windows (Visual Studio) and macOS (Xcode) the steps are the same without
 step 2; on macOS add `-G Xcode` to the first cmake line. No CLAP is built

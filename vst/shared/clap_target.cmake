@@ -10,6 +10,13 @@ function(add_clap_target vst3target)
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         return()
     endif()
+    # The CLAP headers come from the system (/usr/include/clap). Where they are
+    # absent, skip the CLAP target instead of failing the whole build.
+    find_path(CLAP_INCLUDE_DIR clap/clap.h)
+    if(NOT CLAP_INCLUDE_DIR)
+        message(STATUS "${vst3target}: clap/clap.h not found, CLAP target skipped")
+        return()
+    endif()
     set(_sdk "${CMAKE_CURRENT_SOURCE_DIR}/../sdk")
     get_target_property(_src ${vst3target} SOURCES)
 
@@ -26,6 +33,7 @@ function(add_clap_target vst3target)
     set_target_properties(${vst3target}CLAP PROPERTIES
         PREFIX "" OUTPUT_NAME "${vst3target}" SUFFIX ".clap")
     target_include_directories(${vst3target}CLAP PRIVATE
+        ${CLAP_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../shared)
     target_link_libraries(${vst3target}CLAP PRIVATE sdk vstgui_support)

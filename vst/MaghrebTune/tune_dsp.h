@@ -78,11 +78,17 @@ public:
         // that already exist.
         shift_.setup(sr_, kLowestHz);
         shiftR_.setup(sr_, kLowestHz);
+        // The dry line has to hold the longest latency either mode can report,
+        // which is this one, before applyRange narrows it. A fixed 8192 was
+        // shorter than that above ~380 kHz, and past twice its length the read
+        // index in mixInto went negative - the validator's 1.2 MHz pass read
+        // off the front of the buffer and crashed about one run in four.
+        const size_t drySize = std::max<size_t>(8192, (size_t)shift_.latency() + 1);
         applyRange();
         ring_.assign(kWindow * 4, 0.f);
         work_.assign(kWindow, 0.f);
-        dry_.assign(8192, 0.f);
-        dryR_.assign(8192, 0.f);
+        dry_.assign(drySize, 0.f);
+        dryR_.assign(drySize, 0.f);
         mono_.assign(4096, 0.f);
         wpos_ = 0;
         sinceHop_ = 0;

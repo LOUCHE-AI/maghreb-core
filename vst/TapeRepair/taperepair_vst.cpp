@@ -300,7 +300,13 @@ std::string TapeRepairVST::sendToTapeGrain(std::string* err) {
     const std::string folder = mhand::folder();
 
     char stamp[32];
-    const std::tm tm = mplat::localTime(std::time(nullptr));
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    #if defined(_WIN32)
+    localtime_s(&tm, &t);
+    #else
+    localtime_r(&t, &tm);
+    #endif
     std::strftime(stamp, sizeof stamp, "%Y-%m-%d %H%M%S", &tm);
 
     const std::string name = std::string(mhand::prefix()) + stamp +
@@ -332,7 +338,13 @@ int TapeRepairVST::splitToFiles(std::string* err) {
     std::filesystem::create_directories(folder, ec);
 
     char stamp[32];
-    const std::tm tm = mplat::localTime(std::time(nullptr));
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    #if defined(_WIN32)
+    localtime_s(&tm, &t);
+    #else
+    localtime_r(&t, &tm);
+    #endif
     std::strftime(stamp, sizeof stamp, "%Y-%m-%d %H%M%S", &tm);
 
     int written = 0;

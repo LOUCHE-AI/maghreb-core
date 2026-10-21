@@ -1,0 +1,30 @@
+name: Something is broken
+description: A crash, a wrong sound, a control that does nothing.
+labels: [bug]
+body:
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Which plug-in
+      options: [MaghrebDX, MaghrebFM, MaghrebSeq, MaghrebTubu, MaghrebTune, TapeGrain, TapeRepair, TubuDX, More than one]
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: System, DAW and format
+      placeholder: Windows 11, Ableton Live 12, VST3
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Release
+      placeholder: v0.2.1
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: The steps that make it happen again help most.
+    validations:
+      required: true

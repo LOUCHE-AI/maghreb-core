@@ -32,6 +32,13 @@ first. After copying, run this once in Terminal:
 
     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Maghreb*.vst3 ~/Library/Audio/Plug-Ins/VST3/Tape*.vst3 ~/Library/Audio/Plug-Ins/VST3/TubuDX.vst3
 
+## Feedback
+
+- **Something broken?** [Open an issue](https://github.com/LOUCHE-AI/maghreb-instruments/issues/new/choose) -
+  say which plug-in, your system and DAW, and what happened.
+- **An idea, a tip, a question, or something you made with them?** Post it in
+  [Discussions](https://github.com/LOUCHE-AI/maghreb-instruments/discussions).
+
 ## Controllers
 
 Every knob and switch is a host parameter, so any MIDI controller can be

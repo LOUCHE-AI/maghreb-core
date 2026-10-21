@@ -110,6 +110,10 @@ jobs:
           Where the files go, and the one Terminal command macOS needs because
           the plug-ins are not signed by Apple: see the
           [README](https://github.com/LOUCHE-AI/maghreb-instruments#download).
+
+          Something broken? [Open an issue](https://github.com/LOUCHE-AI/maghreb-instruments/issues/new/choose).
+          Ideas and tips: [Discussions](https://github.com/LOUCHE-AI/maghreb-instruments/discussions).
+          Like them? [Ko-fi](https://ko-fi.com/louloulouche).
           EOF
           gh release create "$GITHUB_REF_NAME" maghreb-instruments-*.zip \
             --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md

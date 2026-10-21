@@ -32,12 +32,14 @@ first. After copying, run this once in Terminal:
 
     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Maghreb*.vst3 ~/Library/Audio/Plug-Ins/VST3/Tape*.vst3 ~/Library/Audio/Plug-Ins/VST3/TubuDX.vst3
 
-## Feedback
+## Feedback and support
 
 - **Something broken?** [Open an issue](https://github.com/LOUCHE-AI/maghreb-instruments/issues/new/choose) -
   say which plug-in, your system and DAW, and what happened.
 - **An idea, a tip, a question, or something you made with them?** Post it in
   [Discussions](https://github.com/LOUCHE-AI/maghreb-instruments/discussions).
+- **Like them?** They are free. If you want to support the work,
+  there is [Ko-fi](https://ko-fi.com/louloulouche).
 
 ## Controllers
 

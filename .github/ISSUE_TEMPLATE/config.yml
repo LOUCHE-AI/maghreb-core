@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: Tips, ideas and questions
-    url: https://github.com/LOUCHE-AI/maghreb-instruments/discussions
+    url: https://github.com/LOUCHE-AI/maghreb-core/discussions
     about: Share how you use them, ask how something works, or float an idea before it is a request.
   - name: Support the work
     url: https://ko-fi.com/louloulouche

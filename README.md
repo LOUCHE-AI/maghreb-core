@@ -1,4 +1,4 @@
-# maghreb-instruments
+# Maghreb Core
 
 Eight audio plug-ins, VST3 and CLAP, built around Maghrebi rhythm and tuning
 and around cassette tape. They started as modules for the Ableton Move and grew
@@ -18,7 +18,7 @@ into desktop plug-ins.
 ## Download
 
 Get the zip for your system from the
-[latest release](https://github.com/LOUCHE-AI/maghreb-instruments/releases/latest),
+[latest release](https://github.com/LOUCHE-AI/maghreb-core/releases/latest),
 unzip it, and copy the plug-ins to where your DAW looks:
 
 | System  | Needs | VST3 goes in | CLAP goes in |
@@ -34,10 +34,10 @@ first. After copying, run this once in Terminal:
 
 ## Feedback and support
 
-- **Something broken?** [Open an issue](https://github.com/LOUCHE-AI/maghreb-instruments/issues/new/choose) -
+- **Something broken?** [Open an issue](https://github.com/LOUCHE-AI/maghreb-core/issues/new/choose) -
   say which plug-in, your system and DAW, and what happened.
 - **An idea, a tip, a question, or something you made with them?** Post it in
-  [Discussions](https://github.com/LOUCHE-AI/maghreb-instruments/discussions).
+  [Discussions](https://github.com/LOUCHE-AI/maghreb-core/discussions).
 - **Like them?** They are free. If you want to support the work,
   there is [Ko-fi](https://ko-fi.com/louloulouche).
 

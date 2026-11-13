@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <string>
 #include <cstring>
 
@@ -56,8 +57,22 @@ enum Param {
     // a Set saved before the DX engine existed still loads.
     kEngine = kSection0 + kSections * kSectionStride,
     kTone, kVelFM,
+    // Appended last for the same reason: off, or every 1/2/4/8/16/32 bars.
+    kShuffle,
     kNumParams
 };
+
+// What each Shuffle setting means, in bars between one lane's changes.
+static const int kShuffleBars[] = {0, 1, 2, 4, 8, 16, 32};
+static const int kNumShuffleSettings = 7;
+
+// The rhythms Shuffle picks from: the Tunisian and Algerian ones, by name.
+static inline bool inShufflePool(int r) {
+    if (r < 0 || r >= kNumRhythms) return false;
+    const char* n = kRhythmNames[r];
+    return std::strncmp(n, "TN-", 3) == 0 || std::strncmp(n, "DZ-", 3) == 0 ||
+           std::strstr(n, "tunisia") || std::strstr(n, "algeria");
+}
 
 static inline int laneParam(int lane, int off) { return kLane0 + lane * kLaneStride + off; }
 static inline int sectionParam(int s, int off) { return kSection0 + s * kSectionStride + off; }
@@ -78,11 +93,19 @@ struct EngineView {
     bool running = false;
     int engine = 0;        // 0 = FM, 1 = DX
     int voices = 0;
+    int shuffleLane = -1;  // the lane Shuffle changes next, -1 when it is off
+    int shuffleBar = 0;    // and the bar it changes on, counted from 1
 };
 
 class MaghrebSeq {
 public:
-    MaghrebSeq() { resetKit(); reset(); }
+    MaghrebSeq() {
+        resetKit(); reset();
+        for (int r = 0; r < kNumRhythms; r++)
+            if (inShufflePool(r)) pool_[poolN_++] = r;
+        // Any non-zero start will do; the clock makes two instances differ.
+        rng_ = (uint32_t)std::chrono::steady_clock::now().time_since_epoch().count() | 1u;
+    }
 
     void setSampleRate(double sr) {
         sr_ = (sr > 0) ? sr : 44100.0;
@@ -108,6 +131,28 @@ public:
     int cycleLength(int lane) const {
         return (int)std::strlen(kRhythms[rhythmOf(lane)]);
     }
+
+    // ---- Shuffle ----
+    //
+    // Every N bars each lane takes a new rhythm from the pool, and the lanes
+    // take turns: lane l is shifted by l quarters of N, so with N = 16 one lane
+    // changes every four bars and never all four on the same downbeat. Bars
+    // are sixteen 16ths from the start of the timeline, the same bars the song
+    // sections count. A lane keeps its place in the timeline, as it does when
+    // the rhythm is picked by hand, so an odd cycle enters mid-turn.
+    int shuffleEvery() const {
+        return kShuffleBars[clampi((int)(p_[kShuffle] + 0.5f), 0, kNumShuffleSettings - 1)];
+    }
+    static int shuffleOffset(int every, int lane) { return every * lane / kLanes; }
+    // Whether lane `lane` changes at the downbeat of bar `bar` (0 = the first).
+    static bool shufflesAt(int every, int lane, int64_t bar) {
+        if (every <= 0 || bar <= 0) return false;
+        const int64_t d = bar - shuffleOffset(every, lane);
+        return d >= 0 && d % every == 0;
+    }
+    // Lanes changed since the last call, one bit each, for the wrapper to tell
+    // the host and the editor. Cleared by reading.
+    uint32_t takeShuffled() { return shuffled_.exchange(0, std::memory_order_acq_rel); }
 
     // How many 16ths the whole song lasts. Sections with zero bars are
     // skipped, so a two-section song is just two sections long.
@@ -612,7 +657,29 @@ private:
     }
     double secPerBeat() const { return secPerBeat_; }
 
+    // Before the lanes are read, so a new rhythm sounds from its own downbeat.
+    // Not while an export has the engine: a render must not rewrite the lanes.
+    void shuffleAt(int64_t step) {
+        const int every = shuffleEvery();
+        if (every <= 0 || step % 16 != 0 || poolN_ < 2) return;
+        if (busy_.load(std::memory_order_acquire)) return;
+        const int64_t bar = step / 16;
+        for (int lane = 0; lane < kLanes; lane++) {
+            if (!shufflesAt(every, lane, bar)) continue;
+            const int was = rhythmOf(lane);
+            int r = was;
+            while (r == was) r = pool_[nextRandom() % (uint32_t)poolN_];
+            p_[laneParam(lane, kLaneRhythm)] = (float)r;
+            shuffled_.fetch_or(1u << lane, std::memory_order_acq_rel);
+        }
+    }
+    uint32_t nextRandom() {   // xorshift32
+        rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
+        return rng_;
+    }
+
     void fireStep(int64_t step, int offsetInBlock) {
+        shuffleAt(step);
         int section = 0, bar = 0;
         locate(step, section, bar);
         curSection_ = section;
@@ -818,6 +885,15 @@ private:
         v.running = running_;
         v.engine = dxEngine() ? 1 : 0;
         v.voices = activeVoices();
+        // the next downbeat any lane changes on, from the bar now playing
+        v.shuffleLane = -1;
+        const int every = shuffleEvery();
+        if (every > 0) {
+            const int64_t now = lastStep_ >= 0 ? lastStep_ / 16 : 0;
+            for (int64_t b = now + 1; b <= now + every && v.shuffleLane < 0; b++)
+                for (int lane = 0; lane < kLanes; lane++)
+                    if (shufflesAt(every, lane, b)) { v.shuffleLane = lane; v.shuffleBar = (int)b + 1; break; }
+        }
         viewIdx_.store(1 - cur, std::memory_order_release);
     }
 
@@ -843,6 +919,7 @@ private:
         p_[kEngine] = 0.f;
         p_[kTone] = 0.5f;
         p_[kVelFM] = 0.55f;
+        p_[kShuffle] = 0.f;
 
         // four lanes on four different rhythms and kits, so it makes a groove
         // the moment it is loaded rather than one drum on its own
@@ -912,6 +989,11 @@ private:
     int pendingN_ = 0;
     std::atomic<bool> busy_ {false};
     std::atomic<int> viewIdx_{0};
+
+    int pool_[kNumRhythms] = {0};          // Shuffle's rhythms
+    int poolN_ = 0;
+    uint32_t rng_ = 1;
+    std::atomic<uint32_t> shuffled_{0};
 };
 
 } // namespace mseq

@@ -225,6 +225,7 @@ private:
     VSTGUI::COptionMenu* rhythmMenu_ = nullptr;
     VSTGUI::COptionMenu* kitMenu_ = nullptr;
     VSTGUI::CTextButton* muteBtn_ = nullptr;
+    VSTGUI::COptionMenu* shuffleMenu_ = nullptr;
     VSTGUI::CTextButton* tabs_[3] = {nullptr, nullptr, nullptr};
 
     std::vector<VSTGUI::CView*> pageViews_[3];

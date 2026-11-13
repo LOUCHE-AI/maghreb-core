@@ -70,7 +70,9 @@ static const mplat::KnobPage kKnobPages[] = {
     {"Lane 2", {13, 14, 15, 16, 17, 18, 19, 20}},
     {"Lane 3", {21, 22, 23, 24, 25, 26, 27, 28}},
     {"Lane 4", {29, 30, 31, 32, 33, 34, 35, 36}},
-    {"Browse", {80, 81, 82, 83, 84, 85, 86, -1}},     // Prev/Next Patch, Prev/Next Fav, Write MIDI, Render Loop, Render Kit
+    // Prev/Next Patch, Prev/Next Fav, Write MIDI, Render Loop, Render Kit, Shuffle
+    {"Browse", {kFirstTrigger + 0, kFirstTrigger + 1, kFirstTrigger + 2, kFirstTrigger + 3,
+                kFirstTrigger + 4, kFirstTrigger + 5, kFirstTrigger + 6, mseq::kShuffle}},
 };
 
 class SeqVST : public SingleComponentEffect {
@@ -96,6 +98,9 @@ public:
     tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue v) SMTG_OVERRIDE;
 
     void setParamFromUI(int id, double normalized);
+    // On the editor's timer: pull in lane rhythms the engine changed itself
+    // (Shuffle), whatever the host does with the output change.
+    void followEngine();
     void setEditor(SeqEditor* e) { editor_ = e; }
 
     const mseq::EngineView& snapshot() const { return dsp_.snapshot(); }

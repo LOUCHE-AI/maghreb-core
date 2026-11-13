@@ -481,7 +481,17 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
         pageViews_[0].push_back(kitMenu_);
         pageViews_[0].push_back(muteBtn_);
 
-        voiceName_ = makeLabel(CRect(kMar + 446, kHdrY, kMar + 700, kHdrY + kHdrH), "",
+        // Shuffle belongs to the whole kit, not the selected lane, so it sits
+        // at the far end of the row, labelled.
+        auto* sl = makeLabel(CRect(kMar + 628, kHdrY, kMar + 690, kHdrY + kHdrH),
+                             "SHUFFLE", kDim, kRightText, true);
+        sl->setMouseEnabled(false);
+        frame->addView(sl);
+        pageViews_[0].push_back(sl);
+        shuffleMenu_ = addMenu(CRect(kMar + 696, kHdrY, kEdW - kMar, kHdrY + kHdrH), mseq::kShuffle);
+        pageViews_[0].push_back(shuffleMenu_);
+
+        voiceName_ = makeLabel(CRect(kMar + 446, kHdrY, kMar + 620, kHdrY + kHdrH), "",
                                kDim, kLeftText, true);
         voiceName_->setMouseEnabled(false);
         frame->addView(voiceName_);
@@ -665,7 +675,7 @@ void PLUGIN_API SeqEditor::close() {
     songBtn_ = nullptr; loopBtn_ = nullptr;
     status_ = nullptr; help_ = nullptr; setName_ = nullptr;
     kitName_ = nullptr; voiceName_ = nullptr;
-    rhythmMenu_ = nullptr; kitMenu_ = nullptr; muteBtn_ = nullptr;
+    rhythmMenu_ = nullptr; kitMenu_ = nullptr; muteBtn_ = nullptr; shuffleMenu_ = nullptr;
     tabs_[0] = tabs_[1] = tabs_[2] = nullptr;
     labelFont_ = nullptr; valueFont_ = nullptr; bigFont_ = nullptr; titleFont_ = nullptr;
     if (frame) { frame->forget(); frame = nullptr; mplat::closeEditorFrame(); }
@@ -921,7 +931,7 @@ void SeqEditor::refreshValues() {
         loopBtn_->setValue((float)plug_->getParamNormalized((ParamID)mseq::kSongLoop));
         loopBtn_->invalid();
     }
-    COptionMenu* menus[2] = {rhythmMenu_, kitMenu_};
+    COptionMenu* menus[3] = {rhythmMenu_, kitMenu_, shuffleMenu_};
     for (COptionMenu* m : menus) {
         if (!m) continue;
         const ParamDef& d = params()[m->getTag()];
@@ -1147,6 +1157,7 @@ CMessageResult SeqEditor::notify(CBaseObject* sender, const char* message) {
             }
             setHelp(m.c_str());
         });
+        plug_->followEngine();
         const mseq::EngineView& v = plug_->snapshot();
         if (grid_) {
             for (int l = 0; l < mseq::kLanes; l++)
@@ -1156,11 +1167,14 @@ CMessageResult SeqEditor::notify(CBaseObject* sender, const char* message) {
         }
         if (song_ && page_ == 0) refreshSong();
         if (status_) {
-            char buf[192];
-            snprintf(buf, sizeof buf, "%s / %s / SEC %d / BAR %d.%d / %d VOICES",
-                     v.running ? "PLAYING" : "STOPPED", v.engine ? "DX7" : "FM",
-                     v.section + 1, v.barInSection + 1,
-                     std::max(1, v.sectionBars), v.voices);
+            char buf[256];
+            int n = snprintf(buf, sizeof buf, "%s / %s / SEC %d / BAR %d.%d / %d VOICES",
+                             v.running ? "PLAYING" : "STOPPED", v.engine ? "DX7" : "FM",
+                             v.section + 1, v.barInSection + 1,
+                             std::max(1, v.sectionBars), v.voices);
+            if (v.shuffleLane >= 0 && n > 0 && n < (int)sizeof buf)
+                snprintf(buf + n, sizeof buf - n, " / SHUFFLE: LANE %d AT BAR %d",
+                         v.shuffleLane + 1, v.shuffleBar);
             status_->setText(buf);
         }
     }

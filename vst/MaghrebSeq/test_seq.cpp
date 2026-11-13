@@ -656,6 +656,69 @@ int main() {
         }
     }
 
+    // ---- Shuffle ----
+    {
+        using namespace mseq;
+        // when: every 16 bars, lanes shifted by 0, 4, 8, 12 bars
+        ok("shuffle: lane 2 first at bar 4, lane 1 at bar 16",
+           MaghrebSeq::shufflesAt(16, 1, 4) && MaghrebSeq::shufflesAt(16, 0, 16) &&
+           !MaghrebSeq::shufflesAt(16, 0, 4) && !MaghrebSeq::shufflesAt(16, 0, 0));
+        bool oneAtATime = true;
+        for (int bar = 1; bar < 200; bar++) {
+            int n = 0;
+            for (int l = 0; l < kLanes; l++) n += MaghrebSeq::shufflesAt(16, l, bar);
+            if (n > 1) oneAtATime = false;
+        }
+        ok("shuffle: never two lanes on the same downbeat at 16 bars", oneAtATime);
+
+        // what: play 40 bars at Every 4 bars, watching which bars each lane moved on
+        mseq::MaghrebSeq g;
+        g.setSampleRate(SR);
+        g.setTransport(0.0, true);
+        for (int l = 0; l < kLanes; l++) g.setParam(laneParam(l, kLaneRhythm), 0.f);   // rufaa'aya, not in the pool
+        g.setParam(kShuffle, 3.f);                                                   // Every 4 bars
+        const double bpm = 120.0;
+        const int n = 256;
+        std::vector<float> l(n), r(n);
+        int prev[kLanes]; for (int i = 0; i < kLanes; i++) prev[i] = g.rhythmOf(i);
+        bool rightBar = true, inPool = true, reported = true;
+        int changes = 0;
+        const double spBar = 4 * 60.0 / bpm * SR;
+        for (double t = 0; t < 40 * spBar; t += n) {
+            g.renderBlock(l.data(), r.data(), n, bpm);
+            const uint32_t mask = g.takeShuffled();
+            for (int i = 0; i < kLanes; i++) {
+                const int now = g.rhythmOf(i);
+                if (now == prev[i]) { if (mask & (1u << i)) reported = false; continue; }
+                changes++;
+                if (!(mask & (1u << i))) reported = false;
+                if (!inShufflePool(now)) inPool = false;
+                // the block that ends a little past the bar line: which bar is that
+                const int bar = (int)((t + n) / spBar);
+                if (!MaghrebSeq::shufflesAt(4, i, bar)) rightBar = false;
+                prev[i] = now;
+            }
+        }
+        // 40 bars, each lane every 4 => 10 or 9 changes per lane (offset lanes start later)
+        char m[96]; snprintf(m, sizeof m, "%d changes", changes);
+        ok("shuffle: lanes change in 40 bars at Every 4", changes >= 36 && changes <= 40, m);
+        ok("shuffle: only on that lane's own bar", rightBar);
+        ok("shuffle: only Tunisian or Algerian rhythms", inPool);
+        ok("shuffle: every change is reported to the wrapper", reported);
+
+        int poolN = 0; for (int i = 0; i < kNumRhythms; i++) poolN += inShufflePool(i);
+        snprintf(m, sizeof m, "%d rhythms", poolN);
+        ok("shuffle: the pool is the 64 TN/DZ/tunisia/algeria rhythms", poolN == 64, m);
+
+        // off is off
+        mseq::MaghrebSeq h;
+        h.setSampleRate(SR);
+        h.setTransport(0.0, true);
+        const int before = h.rhythmOf(0);
+        for (double t = 0; t < 40 * spBar; t += n) h.renderBlock(l.data(), r.data(), n, bpm);
+        ok("shuffle: off leaves the lanes alone", h.rhythmOf(0) == before && h.takeShuffled() == 0);
+    }
+
     printf("\n%s\n", fails ? "FAILURES" : "all good");
     return fails ? 1 : 0;
 }

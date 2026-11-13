@@ -41,6 +41,8 @@ namespace Vst {
 static const char* const kOffOn[] = {"Off", "On"};
 static const char* const kKitNames[] = {"Bendir", "Darbuka", "Tar"};
 static const char* const kEngineNames[] = {"FM", "DX7"};
+static const char* const kShuffleNames[mseq::kNumShuffleSettings] = {
+    "Off", "Every bar", "Every 2 bars", "Every 4 bars", "Every 8 bars", "Every 16 bars", "Every 32 bars"};
 
 // The rhythm names are the module's, held as a stable array of pointers for
 // StringListParameter.
@@ -80,6 +82,10 @@ const std::vector<ParamDef>& params() {
         "Which synth the lanes strike. FM is the Move module's two operators. DX7 rebuilds each stroke as a six-operator voice - fuller, with the noise layer on its own operator pair. Hits already sounding ring out when you switch.");
     set(mseq::kTone, "Tone", 0, 1, 0.5, 0, nullptr, 0, "%", 0, 100, 0,
         "Tilts the noise band on every drum. Down is a dull skin, up is a bright rim.");
+    set(mseq::kShuffle, "Shuffle", 0, mseq::kNumShuffleSettings - 1, 0,
+        mseq::kNumShuffleSettings - 1, kShuffleNames, mseq::kNumShuffleSettings, "", 0,
+        mseq::kNumShuffleSettings - 1, 0,
+        "Gives each lane a new rhythm from the Tunisian and Algerian ones, every so many bars while the transport runs. The lanes take turns - with 16 bars one lane changes every four - so they never all change on the same downbeat. The status line shows which lane is next.");
     set(mseq::kVelFM, "Vel>FM", 0, 1, 0.55, 0, nullptr, 0, "%", 0, 100, 0,
         "How much a softer hit takes the FM index down on the DX7 engine, so quiet strokes are dull rather than merely quiet. No effect on FM.");
 
@@ -270,6 +276,21 @@ tresult PLUGIN_API SeqVST::process(ProcessData& data) {
     dsp_.process(data.outputs[0].channelBuffers32[0],
                  data.outputs[0].channelBuffers32[1], data.numSamples);
     data.outputs[0].silenceFlags = 0;
+
+    // Rhythms Shuffle just changed: keep the saved value, and tell the host,
+    // which shows it, records it, and passes it on to the editor's menu.
+    if (const uint32_t changed = dsp_.takeShuffled()) {
+        for (int l = 0; l < mseq::kLanes; l++) {
+            if (!(changed & (1u << l))) continue;
+            const int id = mseq::laneParam(l, mseq::kLaneRhythm);
+            cache_[id] = dsp_.getParam(id);
+            dirty_ = true;
+            int32 index = 0;
+            if (data.outputParameterChanges)
+                if (IParamValueQueue* q = data.outputParameterChanges->addParameterData((ParamID)id, index))
+                    q->addPoint(0, norm(id, cache_[id]), index);
+        }
+    }
 
     sendNotes(data);
     return kResultOk;
@@ -626,6 +647,15 @@ void SeqVST::setParamFromUI(int id, double normalized) {
     applyParam((ParamID)id, normalized);
     SingleComponentEffect::setParamNormalized((ParamID)id, normalized);
     performEdit((ParamID)id, normalized);
+}
+
+void SeqVST::followEngine() {
+    for (int l = 0; l < mseq::kLanes; l++) {
+        const int id = mseq::laneParam(l, mseq::kLaneRhythm);
+        const double n = norm(id, dsp_.getParam(id));
+        if (std::fabs(getParamNormalized((ParamID)id) - n) < 1e-6) continue;
+        setParamNormalized((ParamID)id, n);   // ours: also moves the editor's menu
+    }
 }
 
 void SeqVST::applyParam(ParamID id, ParamValue norm01) {

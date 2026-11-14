@@ -227,6 +227,7 @@ tresult PLUGIN_API SeqVST::initialize(FUnknown* context) {
         cache_[i] = (float)p.def;
         dsp_.setParam(i, (float)p.def);
     }
+    takeSnapshot();
     triggers_.start([this](int t) { runTrigger(t); });
     return kResultOk;
 }
@@ -288,12 +289,6 @@ tresult PLUGIN_API SeqVST::process(ProcessData& data) {
     dsp_.process(data.outputs[0].channelBuffers32[0],
                  data.outputs[0].channelBuffers32[1], data.numSamples);
     data.outputs[0].silenceFlags = 0;
-
-    // Shuffle turned on with every lane off before: the moment to remember
-    // what Restore goes back to. Done on the trigger thread, with the patches.
-    const bool shuffleOn = dsp_.anyShuffle();
-    if (shuffleOn && !shuffleWasOn_) triggers_.post(kTrigSnapshot);
-    shuffleWasOn_ = shuffleOn;
 
     // Patches Shuffle asked for: files, so loaded on the trigger thread.
     if (const uint32_t req = dsp_.takePatchRequests())
@@ -419,7 +414,7 @@ tresult PLUGIN_API SeqVST::setState(IBStream* state) {
             dsp_.loadEdited(i, bytes);
         }
     }
-    haveSnap_ = false;
+    takeSnapshot();                          // what it loaded, unless it saved one
     int32 have = 0;
     if (version >= 5 && st.readInt32(have) && have) {
         bool ok = true;
@@ -433,13 +428,8 @@ tresult PLUGIN_API SeqVST::setState(IBStream* state) {
             ok = ok && st.readInt32(voice);
             snap_[l].voice = voice;
         }
-        haveSnap_ = ok;
+        if (!ok) takeSnapshot();
     }
-    // A Set that comes back with Shuffle on keeps the restore point it was
-    // saved with, rather than taking the shuffled lanes as the new one; one
-    // saved before there was a restore point takes what it has.
-    shuffleWasOn_ = dsp_.anyShuffle();
-    if (shuffleWasOn_ && !haveSnap_) takeSnapshot();
     return kResultOk;
 }
 
@@ -474,9 +464,8 @@ tresult PLUGIN_API SeqVST::getState(IBStream* state) {
     }
     // 5 adds Shuffle's restore point, so a Set saved mid-shuffle can still go
     // back to what it was before.
-    st.writeInt32(haveSnap_ ? 1 : 0);
-    if (haveSnap_)
-        for (int l = 0; l < mseq::kLanes; l++) {
+    st.writeInt32(1);
+    for (int l = 0; l < mseq::kLanes; l++) {
             st.writeFloat(snap_[l].rhythm);
             st.writeFloat(snap_[l].kit);
             st.writeInt32((int32)snap_[l].cart.size());
@@ -494,6 +483,7 @@ bool SeqVST::pickLaneVoice(const char* path, int voice, int lane) {
     dsp_.setLaneVoice(lane, cart[voice].data, cart[voice].name);
     laneCart_[lane] = path;
     laneVoiceIdx_[lane] = voice;
+    if (!shuffling_) { snap_[lane].cart = path; snap_[lane].voice = voice; }
     return true;
 }
 
@@ -507,16 +497,13 @@ void SeqVST::takeSnapshot() {
         snap_[l].cart = laneCart_[l];
         snap_[l].voice = laneVoiceIdx_[l];
     }
-    haveSnap_ = true;
-    markDirty();
 }
 
-// Every lane's rhythm, kit and patch as they were when Shuffle was turned on,
-// and every lane's Shuffle off, or they would be changed again on the next
+// Every lane's rhythm, kit and patch as last chosen by hand, and every lane's
+// Shuffle off, or they would be changed again on the next
 // turn. The parameters go through the engine, so they reach the host the way
 // a Shuffle change does.
 std::string SeqVST::restoreLanes() {
-    if (!haveSnap_) return "Nothing to restore yet: Shuffle has not changed anything.";
     for (int l = 0; l < mseq::kLanes; l++) {
         dsp_.putBack(l, snap_[l].rhythm, snap_[l].kit, 0.f);
         if (snap_[l].cart.empty()) clearLaneVoice(l);
@@ -541,7 +528,10 @@ std::string SeqVST::shufflePatch(int lane) {
         if (items.size() < 2 || items[pick].first != laneCart_[lane] ||
             items[pick].second != laneVoiceIdx_[lane]) break;
     }
-    if (!pickLaneVoice(items[pick].first.c_str(), items[pick].second, lane))
+    shuffling_ = true;
+    const bool picked = pickLaneVoice(items[pick].first.c_str(), items[pick].second, lane);
+    shuffling_ = false;
+    if (!picked)
         return "Shuffle: that cartridge would not read.";
     markDirty();
     char msg[300];
@@ -550,7 +540,6 @@ std::string SeqVST::shufflePatch(int lane) {
 }
 
 std::string SeqVST::runTrigger(int t, const mdx::CartIndex* idx) {
-    if (t == kTrigSnapshot) { takeSnapshot(); return {}; }
     if (t == kTrigRestore) return restoreLanes();
     if (t >= kTrigShufflePatch0 && t < kTrigShufflePatch0 + mseq::kLanes)
         return shufflePatch(t - kTrigShufflePatch0);
@@ -591,6 +580,7 @@ void SeqVST::clearLaneVoice(int lane) {
     dsp_.clearLaneVoice(lane);
     laneCart_[lane].clear();
     laneVoiceIdx_[lane] = 0;
+    if (!shuffling_) { snap_[lane].cart.clear(); snap_[lane].voice = 0; }
 }
 
 // Shared with Maghreb DX and Tubu DX, so all three browse one folder.
@@ -714,9 +704,7 @@ bool SeqVST::loadSet(const char* path) {
             pickLaneVoice(refs.lane[l].cart.c_str(), refs.lane[l].voice, l);
     }
 
-    haveSnap_ = false;                       // another set's lanes are no restore point
-    shuffleWasOn_ = dsp_.anyShuffle();
-    if (shuffleWasOn_) takeSnapshot();
+    takeSnapshot();                          // another set's lanes are the restore point now
     setPath_ = path;
     dirty_ = false;
     return true;
@@ -732,8 +720,7 @@ void SeqVST::initSet() {
     }
     dsp_.resetKit();
     for (int l = 0; l < mseq::kLanes; l++) clearLaneVoice(l);
-    haveSnap_ = false;
-    shuffleWasOn_ = false;
+    takeSnapshot();
     setPath_.clear();
     dirty_ = false;
 }
@@ -776,6 +763,15 @@ void SeqVST::applyParam(ParamID id, ParamValue norm01) {
     if ((int)id >= kNumDsp) return;
     dirty_ = true;
     const float v = (float)denorm((int)id, norm01);
+    // A lane's rhythm or kit moved by hand is the new restore point. The same
+    // value the engine already has is the host repeating what Shuffle told it,
+    // not a choice, so it leaves the restore point alone.
+    // Both are whole numbers, so a round trip through the host's 0..1 is no change.
+    if (std::lround(v) != std::lround(dsp_.getParam((int)id)))
+        for (int l = 0; l < mseq::kLanes; l++) {
+            if ((int)id == mseq::laneParam(l, mseq::kLaneRhythm)) snap_[l].rhythm = v;
+            if ((int)id == mseq::laneParam(l, mseq::kLaneKit)) snap_[l].kit = v;
+        }
     cache_[id] = v;
     dsp_.setParam((int)id, v);
 }

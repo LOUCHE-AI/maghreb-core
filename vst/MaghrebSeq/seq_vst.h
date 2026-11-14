@@ -58,12 +58,9 @@ enum {
     kTrigRestore,          // every lane back to before Shuffle, and Shuffle off
     kNumTriggers
 };
-// Work the plug-in posts to itself on the same thread, never host parameters:
-// a lane's patch from Shuffle, and the restore point taken when it starts.
-enum {
-    kTrigShufflePatch0 = kNumTriggers,
-    kTrigSnapshot = kTrigShufflePatch0 + mseq::kLanes,
-};
+// Work the plug-in posts to itself on the same thread, never a host parameter:
+// a lane's patch from Shuffle.
+enum { kTrigShufflePatch0 = kNumTriggers };
 
 // The knobs, eight to a bank (shared/knob_pages.h). This order is the one
 // Ableton gives a Launchkey or Launchpad, and Bitwig's Remote Controls pages.
@@ -212,12 +209,14 @@ private:
     std::string laneCart_[mseq::kLanes];
     int laneVoiceIdx_[mseq::kLanes] = {0};
 
-    // What Restore goes back to: each lane as it was when Shuffle was turned
-    // on with every lane off before. Saved with the Set.
+    // What Restore goes back to: each lane's rhythm, kit and patch as last
+    // chosen by hand - in the window, from the host, or by loading a Set -
+    // never by Shuffle. Kept up to date on every hand change rather than
+    // caught on the moment Shuffle goes on, which a host reloading the state
+    // or the parameter list could make the plug-in miss. Saved with the Set.
     struct LaneSnap { float rhythm = 0, kit = 0; std::string cart; int voice = 0; };
     LaneSnap snap_[mseq::kLanes];
-    bool haveSnap_ = false;
-    bool shuffleWasOn_ = false;     // audio thread only: the edge that takes the snapshot
+    bool shuffling_ = false;        // a patch Shuffle picked is no restore point
     void takeSnapshot();
     std::string restoreLanes();
     std::string shufflePatch(int lane);

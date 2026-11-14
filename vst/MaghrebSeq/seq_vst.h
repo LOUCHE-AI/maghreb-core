@@ -55,7 +55,14 @@ enum {
     kTrigWriteMidi = mdx::kNumPatchTriggers,
     kTrigRenderLoop,
     kTrigRenderKit,
+    kTrigRestore,          // every lane back to before Shuffle, and Shuffle off
     kNumTriggers
+};
+// Work the plug-in posts to itself on the same thread, never host parameters:
+// a lane's patch from Shuffle, and the restore point taken when it starts.
+enum {
+    kTrigShufflePatch0 = kNumTriggers,
+    kTrigSnapshot = kTrigShufflePatch0 + mseq::kLanes,
 };
 
 // The knobs, eight to a bank (shared/knob_pages.h). This order is the one
@@ -70,9 +77,13 @@ static const mplat::KnobPage kKnobPages[] = {
     {"Lane 2", {13, 14, 15, 16, 17, 18, 19, 20}},
     {"Lane 3", {21, 22, 23, 24, 25, 26, 27, 28}},
     {"Lane 4", {29, 30, 31, 32, 33, 34, 35, 36}},
-    // Prev/Next Patch, Prev/Next Fav, Write MIDI, Render Loop, Render Kit, Shuffle
+    // each lane's period, then what its turn changes
+    {"Shuffle", {mseq::kShuffleEvery0, mseq::kShuffleEvery0 + 1, mseq::kShuffleEvery0 + 2,
+                 mseq::kShuffleEvery0 + 3, mseq::kShuffleWhat0, mseq::kShuffleWhat0 + 1,
+                 mseq::kShuffleWhat0 + 2, mseq::kShuffleWhat0 + 3}},
+    // Prev/Next Patch, Prev/Next Fav, Write MIDI, Render Loop, Render Kit, Restore
     {"Browse", {kFirstTrigger + 0, kFirstTrigger + 1, kFirstTrigger + 2, kFirstTrigger + 3,
-                kFirstTrigger + 4, kFirstTrigger + 5, kFirstTrigger + 6, mseq::kShuffle}},
+                kFirstTrigger + 4, kFirstTrigger + 5, kFirstTrigger + 6, kFirstTrigger + 7}},
 };
 
 class SeqVST : public SingleComponentEffect {
@@ -200,6 +211,16 @@ private:
     SeqEditor* editor_ = nullptr;
     std::string laneCart_[mseq::kLanes];
     int laneVoiceIdx_[mseq::kLanes] = {0};
+
+    // What Restore goes back to: each lane as it was when Shuffle was turned
+    // on with every lane off before. Saved with the Set.
+    struct LaneSnap { float rhythm = 0, kit = 0; std::string cart; int voice = 0; };
+    LaneSnap snap_[mseq::kLanes];
+    bool haveSnap_ = false;
+    bool shuffleWasOn_ = false;     // audio thread only: the edge that takes the snapshot
+    void takeSnapshot();
+    std::string restoreLanes();
+    std::string shufflePatch(int lane);
     std::string setPath_;
     bool dirty_ = false;
     std::atomic<int> editLane_ {0};

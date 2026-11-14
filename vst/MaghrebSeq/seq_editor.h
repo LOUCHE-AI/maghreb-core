@@ -157,6 +157,7 @@ public:
     static const int32_t kWriteMidiId = kUiTagBase + 13;
     static const int32_t kRenderLoopId= kUiTagBase + 14;
     static const int32_t kRenderKitId = kUiTagBase + 15;
+    static const int32_t kRestoreId   = kUiTagBase + 16;
     // patch bytes are not VST3 parameters, so they get their own id space
     static const int32_t kPatchBase   = 100000;
 
@@ -225,7 +226,8 @@ private:
     VSTGUI::COptionMenu* rhythmMenu_ = nullptr;
     VSTGUI::COptionMenu* kitMenu_ = nullptr;
     VSTGUI::CTextButton* muteBtn_ = nullptr;
-    VSTGUI::COptionMenu* shuffleMenu_ = nullptr;
+    VSTGUI::COptionMenu* shuffleMenu_ = nullptr;       // the selected lane's period
+    VSTGUI::COptionMenu* shuffleWhatMenu_ = nullptr;   // and what its turn changes
     VSTGUI::CTextButton* tabs_[3] = {nullptr, nullptr, nullptr};
 
     std::vector<VSTGUI::CView*> pageViews_[3];

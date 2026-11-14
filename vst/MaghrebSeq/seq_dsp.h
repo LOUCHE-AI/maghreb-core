@@ -57,14 +57,39 @@ enum Param {
     // a Set saved before the DX engine existed still loads.
     kEngine = kSection0 + kSections * kSectionStride,
     kTone, kVelFM,
-    // Appended last for the same reason: off, or every 1/2/4/8/16/32 bars.
-    kShuffle,
-    kNumParams
+    // Appended last for the same reason. Per lane: how often Shuffle changes
+    // it (off, or every 1/2/4/8/16/32 bars), then what it changes. The first
+    // was a single Shuffle for every lane, so a Set saved with that one
+    // brings it back as lane 1's.
+    kShuffleEvery0,
+    kShuffleWhat0 = kShuffleEvery0 + kLanes,
+    kNumParams = kShuffleWhat0 + kLanes
 };
 
-// What each Shuffle setting means, in bars between one lane's changes.
+static inline int shuffleEveryParam(int lane) { return kShuffleEvery0 + lane; }
+static inline int shuffleWhatParam(int lane) { return kShuffleWhat0 + lane; }
+
+// What each period setting means, in bars between one lane's changes.
 static const int kShuffleBars[] = {0, 1, 2, 4, 8, 16, 32};
 static const int kNumShuffleSettings = 7;
+
+// What a lane's turn changes. The choices are the menu's, in its order.
+enum { kShuffleRhythm = 1, kShuffleKit = 2, kShufflePatch = 4 };
+static const int kShuffleWhatBits[] = {
+    kShuffleRhythm, kShuffleKit, kShufflePatch,
+    kShuffleRhythm | kShuffleKit, kShuffleRhythm | kShufflePatch, kShuffleKit | kShufflePatch,
+    kShuffleRhythm | kShuffleKit | kShufflePatch};
+static const int kNumShuffleWhat = 7;
+
+// The parameters the engine itself can move - by Shuffle, or by Restore - so
+// the wrapper knows which to report: bit lane for a rhythm, 4 + lane for a
+// kit, 8 + lane for a period.
+static inline int changedParam(int bit) {
+    return bit < 4  ? kLane0 + bit * kLaneStride + kLaneRhythm
+         : bit < 8  ? kLane0 + (bit - 4) * kLaneStride + kLaneKit
+                    : kShuffleEvery0 + (bit - 8);
+}
+static const int kNumChangeable = 12;
 
 // The rhythms Shuffle picks from: the Tunisian and Algerian ones, by name.
 static inline bool inShufflePool(int r) {
@@ -93,7 +118,7 @@ struct EngineView {
     bool running = false;
     int engine = 0;        // 0 = FM, 1 = DX
     int voices = 0;
-    int shuffleLane = -1;  // the lane Shuffle changes next, -1 when it is off
+    int shuffleLane = -1;  // the lane Shuffle changes next, -1 when all are off
     int shuffleBar = 0;    // and the bar it changes on, counted from 1
 };
 
@@ -134,14 +159,23 @@ public:
 
     // ---- Shuffle ----
     //
-    // Every N bars each lane takes a new rhythm from the pool, and the lanes
-    // take turns: lane l is shifted by l quarters of N, so with N = 16 one lane
-    // changes every four bars and never all four on the same downbeat. Bars
-    // are sixteen 16ths from the start of the timeline, the same bars the song
-    // sections count. A lane keeps its place in the timeline, as it does when
-    // the rhythm is picked by hand, so an odd cycle enters mid-turn.
-    int shuffleEvery() const {
-        return kShuffleBars[clampi((int)(p_[kShuffle] + 0.5f), 0, kNumShuffleSettings - 1)];
+    // Every N bars a lane takes a new rhythm from the pool, a new kit, or asks
+    // the wrapper for a new patch - whichever its What setting says - and each
+    // lane has its own N. Lane l is shifted by l quarters of its N, so lanes
+    // on the same N take turns: with 16, one changes every four bars and never
+    // two on the same downbeat. Bars are sixteen 16ths from the start of the
+    // timeline, the same bars the song sections count. A lane keeps its place
+    // in the timeline, as when the rhythm is picked by hand, so an odd cycle
+    // enters mid-turn.
+    int shuffleEvery(int lane) const {
+        return kShuffleBars[clampi((int)(p_[shuffleEveryParam(lane)] + 0.5f), 0, kNumShuffleSettings - 1)];
+    }
+    int shuffleWhat(int lane) const {
+        return kShuffleWhatBits[clampi((int)(p_[shuffleWhatParam(lane)] + 0.5f), 0, kNumShuffleWhat - 1)];
+    }
+    bool anyShuffle() const {
+        for (int l = 0; l < kLanes; l++) if (shuffleEvery(l) > 0) return true;
+        return false;
     }
     static int shuffleOffset(int every, int lane) { return every * lane / kLanes; }
     // Whether lane `lane` changes at the downbeat of bar `bar` (0 = the first).
@@ -150,9 +184,21 @@ public:
         const int64_t d = bar - shuffleOffset(every, lane);
         return d >= 0 && d % every == 0;
     }
-    // Lanes changed since the last call, one bit each, for the wrapper to tell
-    // the host and the editor. Cleared by reading.
-    uint32_t takeShuffled() { return shuffled_.exchange(0, std::memory_order_acq_rel); }
+    // Parameters the engine moved since the last call, as bits for
+    // changedParam(), for the wrapper to tell the host and the editor.
+    uint32_t takeChanged() { return changed_.exchange(0, std::memory_order_acq_rel); }
+    // Lanes whose turn asked for a new patch. The wrapper loads it off the
+    // audio thread, because a patch is a file.
+    uint32_t takePatchRequests() { return patchReq_.exchange(0, std::memory_order_acq_rel); }
+    // Restore, from a thread that is not the audio one: set a lane's rhythm,
+    // kit and period and have them reported like a Shuffle change.
+    void putBack(int lane, float rhythm, float kit, float every) {
+        if (lane < 0 || lane >= kLanes) return;
+        p_[laneParam(lane, kLaneRhythm)] = rhythm;
+        p_[laneParam(lane, kLaneKit)] = kit;
+        p_[shuffleEveryParam(lane)] = every;
+        changed_.fetch_or((1u << lane) | (1u << (4 + lane)) | (1u << (8 + lane)), std::memory_order_acq_rel);
+    }
 
     // How many 16ths the whole song lasts. Sections with zero bars are
     // skipped, so a two-section song is just two sections long.
@@ -660,17 +706,26 @@ private:
     // Before the lanes are read, so a new rhythm sounds from its own downbeat.
     // Not while an export has the engine: a render must not rewrite the lanes.
     void shuffleAt(int64_t step) {
-        const int every = shuffleEvery();
-        if (every <= 0 || step % 16 != 0 || poolN_ < 2) return;
+        if (step % 16 != 0 || poolN_ < 2) return;
         if (busy_.load(std::memory_order_acquire)) return;
         const int64_t bar = step / 16;
         for (int lane = 0; lane < kLanes; lane++) {
-            if (!shufflesAt(every, lane, bar)) continue;
-            const int was = rhythmOf(lane);
-            int r = was;
-            while (r == was) r = pool_[nextRandom() % (uint32_t)poolN_];
-            p_[laneParam(lane, kLaneRhythm)] = (float)r;
-            shuffled_.fetch_or(1u << lane, std::memory_order_acq_rel);
+            if (!shufflesAt(shuffleEvery(lane), lane, bar)) continue;
+            const int what = shuffleWhat(lane);
+            if (what & kShuffleRhythm) {
+                const int was = rhythmOf(lane);
+                int r = was;
+                while (r == was) r = pool_[nextRandom() % (uint32_t)poolN_];
+                p_[laneParam(lane, kLaneRhythm)] = (float)r;
+                changed_.fetch_or(1u << lane, std::memory_order_acq_rel);
+            }
+            if (what & kShuffleKit) {
+                const int was = clampi((int)(p_[laneParam(lane, kLaneKit)] + 0.5f), 0, 2);
+                const int k = (was + 1 + (int)(nextRandom() % 2u)) % 3;   // one of the other two
+                p_[laneParam(lane, kLaneKit)] = (float)k;
+                changed_.fetch_or(1u << (4 + lane), std::memory_order_acq_rel);
+            }
+            if (what & kShufflePatch) patchReq_.fetch_or(1u << lane, std::memory_order_acq_rel);
         }
     }
     uint32_t nextRandom() {   // xorshift32
@@ -887,12 +942,11 @@ private:
         v.voices = activeVoices();
         // the next downbeat any lane changes on, from the bar now playing
         v.shuffleLane = -1;
-        const int every = shuffleEvery();
-        if (every > 0) {
+        if (anyShuffle()) {
             const int64_t now = lastStep_ >= 0 ? lastStep_ / 16 : 0;
-            for (int64_t b = now + 1; b <= now + every && v.shuffleLane < 0; b++)
+            for (int64_t b = now + 1; b <= now + 32 && v.shuffleLane < 0; b++)
                 for (int lane = 0; lane < kLanes; lane++)
-                    if (shufflesAt(every, lane, b)) { v.shuffleLane = lane; v.shuffleBar = (int)b + 1; break; }
+                    if (shufflesAt(shuffleEvery(lane), lane, b)) { v.shuffleLane = lane; v.shuffleBar = (int)b + 1; break; }
         }
         viewIdx_.store(1 - cur, std::memory_order_release);
     }
@@ -919,7 +973,7 @@ private:
         p_[kEngine] = 0.f;
         p_[kTone] = 0.5f;
         p_[kVelFM] = 0.55f;
-        p_[kShuffle] = 0.f;
+        for (int l = 0; l < kLanes; l++) { p_[shuffleEveryParam(l)] = 0.f; p_[shuffleWhatParam(l)] = 0.f; }
 
         // four lanes on four different rhythms and kits, so it makes a groove
         // the moment it is loaded rather than one drum on its own
@@ -993,7 +1047,8 @@ private:
     int pool_[kNumRhythms] = {0};          // Shuffle's rhythms
     int poolN_ = 0;
     uint32_t rng_ = 1;
-    std::atomic<uint32_t> shuffled_{0};
+    std::atomic<uint32_t> changed_{0};
+    std::atomic<uint32_t> patchReq_{0};
 };
 
 } // namespace mseq

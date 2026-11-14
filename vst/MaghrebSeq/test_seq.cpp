@@ -659,7 +659,7 @@ int main() {
     // ---- Shuffle ----
     {
         using namespace mseq;
-        // when: every 16 bars, lanes shifted by 0, 4, 8, 12 bars
+        // when: on one period, lanes shifted by 0, 4, 8, 12 bars
         ok("shuffle: lane 2 first at bar 4, lane 1 at bar 16",
            MaghrebSeq::shufflesAt(16, 1, 4) && MaghrebSeq::shufflesAt(16, 0, 16) &&
            !MaghrebSeq::shufflesAt(16, 0, 4) && !MaghrebSeq::shufflesAt(16, 0, 0));
@@ -671,44 +671,71 @@ int main() {
         }
         ok("shuffle: never two lanes on the same downbeat at 16 bars", oneAtATime);
 
-        // what: play 40 bars at Every 4 bars, watching which bars each lane moved on
+        // Each lane its own period and its own what, 40 bars of 4/4:
+        //   lane 1 rhythm every 4, lane 2 kit every 8, lane 3 patch every 2, lane 4 off
+        const double bpm = 120.0, spBar = 4 * 60.0 / bpm * SR;
+        const int n = 256;
+        std::vector<float> l(n), r(n);
         mseq::MaghrebSeq g;
         g.setSampleRate(SR);
         g.setTransport(0.0, true);
-        for (int l = 0; l < kLanes; l++) g.setParam(laneParam(l, kLaneRhythm), 0.f);   // rufaa'aya, not in the pool
-        g.setParam(kShuffle, 3.f);                                                   // Every 4 bars
-        const double bpm = 120.0;
-        const int n = 256;
-        std::vector<float> l(n), r(n);
-        int prev[kLanes]; for (int i = 0; i < kLanes; i++) prev[i] = g.rhythmOf(i);
+        for (int i = 0; i < kLanes; i++) g.setParam(laneParam(i, kLaneRhythm), 0.f);  // rufaa'aya, not in the pool
+        g.setParam(shuffleEveryParam(0), 3.f); g.setParam(shuffleWhatParam(0), 0.f);  // 4 bars, Rhythm
+        g.setParam(shuffleEveryParam(1), 4.f); g.setParam(shuffleWhatParam(1), 1.f);  // 8 bars, Kit
+        g.setParam(shuffleEveryParam(2), 2.f); g.setParam(shuffleWhatParam(2), 2.f);  // 2 bars, Patch
+        int rhythm[kLanes], kit[kLanes];
+        for (int i = 0; i < kLanes; i++) { rhythm[i] = g.rhythmOf(i); kit[i] = (int)g.getParam(laneParam(i, kLaneKit)); }
+        int rhythmChanges[kLanes] = {0}, kitChanges[kLanes] = {0}, patchAsks[kLanes] = {0};
         bool rightBar = true, inPool = true, reported = true;
-        int changes = 0;
-        const double spBar = 4 * 60.0 / bpm * SR;
         for (double t = 0; t < 40 * spBar; t += n) {
             g.renderBlock(l.data(), r.data(), n, bpm);
-            const uint32_t mask = g.takeShuffled();
+            const uint32_t ch = g.takeChanged(), pr = g.takePatchRequests();
+            const int bar = (int)((t + n) / spBar);
             for (int i = 0; i < kLanes; i++) {
-                const int now = g.rhythmOf(i);
-                if (now == prev[i]) { if (mask & (1u << i)) reported = false; continue; }
-                changes++;
-                if (!(mask & (1u << i))) reported = false;
-                if (!inShufflePool(now)) inPool = false;
-                // the block that ends a little past the bar line: which bar is that
-                const int bar = (int)((t + n) / spBar);
-                if (!MaghrebSeq::shufflesAt(4, i, bar)) rightBar = false;
-                prev[i] = now;
+                const int rn = g.rhythmOf(i), kn = (int)(g.getParam(laneParam(i, kLaneKit)) + 0.5f);
+                if (rn != rhythm[i]) {
+                    rhythmChanges[i]++;
+                    if (!(ch & (1u << i))) reported = false;
+                    if (!inShufflePool(rn)) inPool = false;
+                    if (!MaghrebSeq::shufflesAt(g.shuffleEvery(i), i, bar)) rightBar = false;
+                    rhythm[i] = rn;
+                }
+                if (kn != kit[i]) {
+                    kitChanges[i]++;
+                    if (!(ch & (1u << (4 + i)))) reported = false;
+                    if (!MaghrebSeq::shufflesAt(g.shuffleEvery(i), i, bar)) rightBar = false;
+                    kit[i] = kn;
+                }
+                if (pr & (1u << i)) {
+                    patchAsks[i]++;
+                    if (!MaghrebSeq::shufflesAt(g.shuffleEvery(i), i, bar)) rightBar = false;
+                }
             }
         }
-        // 40 bars, each lane every 4 => 10 or 9 changes per lane (offset lanes start later)
-        char m[96]; snprintf(m, sizeof m, "%d changes", changes);
-        ok("shuffle: lanes change in 40 bars at Every 4", changes >= 36 && changes <= 40, m);
+        char m[160];
+        snprintf(m, sizeof m, "rhythm %d %d %d %d, kit %d %d %d %d, patch %d %d %d %d",
+                 rhythmChanges[0], rhythmChanges[1], rhythmChanges[2], rhythmChanges[3],
+                 kitChanges[0], kitChanges[1], kitChanges[2], kitChanges[3],
+                 patchAsks[0], patchAsks[1], patchAsks[2], patchAsks[3]);
+        ok("shuffle: each lane changes only what it was told, as often as it was told",
+           rhythmChanges[0] >= 9 && rhythmChanges[0] <= 10 && kitChanges[0] == 0 && patchAsks[0] == 0 &&
+           rhythmChanges[1] == 0 && kitChanges[1] >= 4 && kitChanges[1] <= 5 && patchAsks[1] == 0 &&
+           rhythmChanges[2] == 0 && kitChanges[2] == 0 && patchAsks[2] >= 19 && patchAsks[2] <= 20 &&
+           rhythmChanges[3] == 0 && kitChanges[3] == 0 && patchAsks[3] == 0, m);
         ok("shuffle: only on that lane's own bar", rightBar);
         ok("shuffle: only Tunisian or Algerian rhythms", inPool);
-        ok("shuffle: every change is reported to the wrapper", reported);
+        ok("shuffle: every rhythm and kit change is reported to the wrapper", reported);
 
         int poolN = 0; for (int i = 0; i < kNumRhythms; i++) poolN += inShufflePool(i);
         snprintf(m, sizeof m, "%d rhythms", poolN);
         ok("shuffle: the pool is the 64 TN/DZ/tunisia/algeria rhythms", poolN == 64, m);
+
+        // Restore's way back in: rhythm, kit and period set, and all reported
+        g.putBack(0, 11.f, 2.f, 0.f);
+        const uint32_t back = g.takeChanged();
+        ok("shuffle: putBack sets the lane and turns its Shuffle off",
+           g.rhythmOf(0) == 11 && (int)g.getParam(laneParam(0, kLaneKit)) == 2 && g.shuffleEvery(0) == 0 &&
+           (back & 1u) && (back & (1u << 4)) && (back & (1u << 8)));
 
         // off is off
         mseq::MaghrebSeq h;
@@ -716,7 +743,8 @@ int main() {
         h.setTransport(0.0, true);
         const int before = h.rhythmOf(0);
         for (double t = 0; t < 40 * spBar; t += n) h.renderBlock(l.data(), r.data(), n, bpm);
-        ok("shuffle: off leaves the lanes alone", h.rhythmOf(0) == before && h.takeShuffled() == 0);
+        ok("shuffle: off leaves the lanes alone",
+           h.rhythmOf(0) == before && h.takeChanged() == 0 && h.takePatchRequests() == 0 && !h.anyShuffle());
     }
 
     printf("\n%s\n", fails ? "FAILURES" : "all good");

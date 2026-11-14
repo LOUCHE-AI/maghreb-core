@@ -42,7 +42,10 @@ static const char* const kOffOn[] = {"Off", "On"};
 static const char* const kKitNames[] = {"Bendir", "Darbuka", "Tar"};
 static const char* const kEngineNames[] = {"FM", "DX7"};
 static const char* const kShuffleNames[mseq::kNumShuffleSettings] = {
-    "Off", "Every bar", "Every 2 bars", "Every 4 bars", "Every 8 bars", "Every 16 bars", "Every 32 bars"};
+    "Shuffle off", "Shuffle 1 bar", "Shuffle 2 bars", "Shuffle 4 bars",
+    "Shuffle 8 bars", "Shuffle 16 bars", "Shuffle 32 bars"};
+static const char* const kShuffleWhatNames[mseq::kNumShuffleWhat] = {
+    "Rhythm", "Kit", "Patch", "Rhythm + Kit", "Rhythm + Patch", "Kit + Patch", "All three"};
 
 // The rhythm names are the module's, held as a stable array of pointers for
 // StringListParameter.
@@ -82,10 +85,19 @@ const std::vector<ParamDef>& params() {
         "Which synth the lanes strike. FM is the Move module's two operators. DX7 rebuilds each stroke as a six-operator voice - fuller, with the noise layer on its own operator pair. Hits already sounding ring out when you switch.");
     set(mseq::kTone, "Tone", 0, 1, 0.5, 0, nullptr, 0, "%", 0, 100, 0,
         "Tilts the noise band on every drum. Down is a dull skin, up is a bright rim.");
-    set(mseq::kShuffle, "Shuffle", 0, mseq::kNumShuffleSettings - 1, 0,
-        mseq::kNumShuffleSettings - 1, kShuffleNames, mseq::kNumShuffleSettings, "", 0,
-        mseq::kNumShuffleSettings - 1, 0,
-        "Gives each lane a new rhythm from the Tunisian and Algerian ones, every so many bars while the transport runs. The lanes take turns - with 16 bars one lane changes every four - so they never all change on the same downbeat. The status line shows which lane is next.");
+    for (int l = 0; l < mseq::kLanes; l++) {
+        char n[64];
+        snprintf(n, sizeof n, "L%d Shuffle", l + 1);
+        set(mseq::shuffleEveryParam(l), n, 0, mseq::kNumShuffleSettings - 1, 0,
+            mseq::kNumShuffleSettings - 1, kShuffleNames, mseq::kNumShuffleSettings, "", 0,
+            mseq::kNumShuffleSettings - 1, 0,
+            "How often Shuffle changes this lane while the transport runs. Lanes on the same setting take turns - at 16 bars one changes every four - so they never change on the same downbeat. RESTORE puts every lane back as it was when Shuffle was turned on.");
+        snprintf(n, sizeof n, "L%d Shuffle What", l + 1);
+        set(mseq::shuffleWhatParam(l), n, 0, mseq::kNumShuffleWhat - 1, 0,
+            mseq::kNumShuffleWhat - 1, kShuffleWhatNames, mseq::kNumShuffleWhat, "", 0,
+            mseq::kNumShuffleWhat - 1, 0,
+            "What this lane's turn changes: a new Tunisian or Algerian rhythm, one of the other two kits, a patch from your starred favourites, or a mix of them.");
+    }
     set(mseq::kVelFM, "Vel>FM", 0, 1, 0.55, 0, nullptr, 0, "%", 0, 100, 0,
         "How much a softer hit takes the FM index down on the DX7 engine, so quiet strokes are dull rather than merely quiet. No effect on FM.");
 
@@ -173,7 +185,7 @@ tresult PLUGIN_API SeqVST::initialize(FUnknown* context) {
     static const char* const kTriggerNames[kNumTriggers] = {
         mdx::kPatchTriggerNames[0], mdx::kPatchTriggerNames[1],
         mdx::kPatchTriggerNames[2], mdx::kPatchTriggerNames[3],
-        "Write MIDI", "Render Loop", "Render Kit",
+        "Write MIDI", "Render Loop", "Render Kit", "Restore",
     };
     for (int i : mplat::knobOrder(kKnobPages, kFirstTrigger + kNumTriggers)) {
         if (i >= kFirstTrigger) {
@@ -277,12 +289,24 @@ tresult PLUGIN_API SeqVST::process(ProcessData& data) {
                  data.outputs[0].channelBuffers32[1], data.numSamples);
     data.outputs[0].silenceFlags = 0;
 
-    // Rhythms Shuffle just changed: keep the saved value, and tell the host,
-    // which shows it, records it, and passes it on to the editor's menu.
-    if (const uint32_t changed = dsp_.takeShuffled()) {
-        for (int l = 0; l < mseq::kLanes; l++) {
-            if (!(changed & (1u << l))) continue;
-            const int id = mseq::laneParam(l, mseq::kLaneRhythm);
+    // Shuffle turned on with every lane off before: the moment to remember
+    // what Restore goes back to. Done on the trigger thread, with the patches.
+    const bool shuffleOn = dsp_.anyShuffle();
+    if (shuffleOn && !shuffleWasOn_) triggers_.post(kTrigSnapshot);
+    shuffleWasOn_ = shuffleOn;
+
+    // Patches Shuffle asked for: files, so loaded on the trigger thread.
+    if (const uint32_t req = dsp_.takePatchRequests())
+        for (int l = 0; l < mseq::kLanes; l++)
+            if (req & (1u << l)) triggers_.post(kTrigShufflePatch0 + l);
+
+    // Rhythms, kits and periods the engine moved (Shuffle, Restore): keep the
+    // saved value, and tell the host, which shows it, records it, and passes
+    // it on to the editor's menu.
+    if (const uint32_t changed = dsp_.takeChanged()) {
+        for (int b = 0; b < mseq::kNumChangeable; b++) {
+            if (!(changed & (1u << b))) continue;
+            const int id = mseq::changedParam(b);
             cache_[id] = dsp_.getParam(id);
             dirty_ = true;
             int32 index = 0;
@@ -344,7 +368,7 @@ void SeqVST::sendNotes(ProcessData& data) {
 
 // 2 adds the kit path, 3 the cartridge voice on each lane. Older Sets still
 // load; they simply have neither, which is what they played.
-static const int32 kStateVersion = 4;
+static const int32 kStateVersion = 5;
 
 tresult PLUGIN_API SeqVST::setState(IBStream* state) {
     if (!state) return kResultFalse;
@@ -395,6 +419,27 @@ tresult PLUGIN_API SeqVST::setState(IBStream* state) {
             dsp_.loadEdited(i, bytes);
         }
     }
+    haveSnap_ = false;
+    int32 have = 0;
+    if (version >= 5 && st.readInt32(have) && have) {
+        bool ok = true;
+        for (int l = 0; l < mseq::kLanes && ok; l++) {
+            int32 len = 0, voice = 0;
+            ok = st.readFloat(snap_[l].rhythm) && st.readFloat(snap_[l].kit) && st.readInt32(len)
+                 && len >= 0 && len < 4096;
+            if (!ok) break;
+            snap_[l].cart.assign((size_t)len, ' ');
+            if (len > 0) ok = st.readRaw(&snap_[l].cart[0], len) == len;
+            ok = ok && st.readInt32(voice);
+            snap_[l].voice = voice;
+        }
+        haveSnap_ = ok;
+    }
+    // A Set that comes back with Shuffle on keeps the restore point it was
+    // saved with, rather than taking the shuffled lanes as the new one; one
+    // saved before there was a restore point takes what it has.
+    shuffleWasOn_ = dsp_.anyShuffle();
+    if (shuffleWasOn_ && !haveSnap_) takeSnapshot();
     return kResultOk;
 }
 
@@ -427,6 +472,17 @@ tresult PLUGIN_API SeqVST::getState(IBStream* state) {
         const uint8_t* b = dsp_.editedBytes(i);
         st.writeRaw(b, 156);
     }
+    // 5 adds Shuffle's restore point, so a Set saved mid-shuffle can still go
+    // back to what it was before.
+    st.writeInt32(haveSnap_ ? 1 : 0);
+    if (haveSnap_)
+        for (int l = 0; l < mseq::kLanes; l++) {
+            st.writeFloat(snap_[l].rhythm);
+            st.writeFloat(snap_[l].kit);
+            st.writeInt32((int32)snap_[l].cart.size());
+            if (!snap_[l].cart.empty()) st.writeRaw(snap_[l].cart.data(), (int32)snap_[l].cart.size());
+            st.writeInt32((int32)snap_[l].voice);
+        }
     return kResultOk;
 }
 
@@ -444,7 +500,60 @@ bool SeqVST::pickLaneVoice(const char* path, int voice, int lane) {
 // Whatever a controller pressed, and the line the editor shows for it. The
 // editor's own export buttons come through here too, so the two never say
 // different things.
+void SeqVST::takeSnapshot() {
+    for (int l = 0; l < mseq::kLanes; l++) {
+        snap_[l].rhythm = cache_[mseq::laneParam(l, mseq::kLaneRhythm)];
+        snap_[l].kit = cache_[mseq::laneParam(l, mseq::kLaneKit)];
+        snap_[l].cart = laneCart_[l];
+        snap_[l].voice = laneVoiceIdx_[l];
+    }
+    haveSnap_ = true;
+    markDirty();
+}
+
+// Every lane's rhythm, kit and patch as they were when Shuffle was turned on,
+// and every lane's Shuffle off, or they would be changed again on the next
+// turn. The parameters go through the engine, so they reach the host the way
+// a Shuffle change does.
+std::string SeqVST::restoreLanes() {
+    if (!haveSnap_) return "Nothing to restore yet: Shuffle has not changed anything.";
+    for (int l = 0; l < mseq::kLanes; l++) {
+        dsp_.putBack(l, snap_[l].rhythm, snap_[l].kit, 0.f);
+        if (snap_[l].cart.empty()) clearLaneVoice(l);
+        else pickLaneVoice(snap_[l].cart.c_str(), snap_[l].voice, l);
+    }
+    markDirty();
+    return "Every lane is back as it was before Shuffle, and Shuffle is off.";
+}
+
+// A patch for a lane's Shuffle turn: one of the starred favourites, not the one
+// it has. Starred, because the whole cartridge folder holds pianos and bells.
+std::string SeqVST::shufflePatch(int lane) {
+    mdx::Favourites f;
+    f.setFile(mdx::favouritesFile("MaghrebSeq"));
+    const auto& items = f.all();
+    if (items.empty()) return "Shuffle has no patches to pick: star some favourites in the browser.";
+    static thread_local uint32_t seed = (uint32_t)std::time(nullptr) * 2654435761u | 1u;
+    int pick = 0;
+    for (int tries = 0; tries < 8; tries++) {
+        seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+        pick = (int)(seed % (uint32_t)items.size());
+        if (items.size() < 2 || items[pick].first != laneCart_[lane] ||
+            items[pick].second != laneVoiceIdx_[lane]) break;
+    }
+    if (!pickLaneVoice(items[pick].first.c_str(), items[pick].second, lane))
+        return "Shuffle: that cartridge would not read.";
+    markDirty();
+    char msg[300];
+    snprintf(msg, sizeof msg, "Shuffle: lane %d plays \"%s\".", lane + 1, laneVoiceName(lane));
+    return msg;
+}
+
 std::string SeqVST::runTrigger(int t, const mdx::CartIndex* idx) {
+    if (t == kTrigSnapshot) { takeSnapshot(); return {}; }
+    if (t == kTrigRestore) return restoreLanes();
+    if (t >= kTrigShufflePatch0 && t < kTrigShufflePatch0 + mseq::kLanes)
+        return shufflePatch(t - kTrigShufflePatch0);
     char msg[300];
     if (t < mdx::kNumPatchTriggers) {
         const int lane = editLane();
@@ -605,6 +714,9 @@ bool SeqVST::loadSet(const char* path) {
             pickLaneVoice(refs.lane[l].cart.c_str(), refs.lane[l].voice, l);
     }
 
+    haveSnap_ = false;                       // another set's lanes are no restore point
+    shuffleWasOn_ = dsp_.anyShuffle();
+    if (shuffleWasOn_) takeSnapshot();
     setPath_ = path;
     dirty_ = false;
     return true;
@@ -620,6 +732,8 @@ void SeqVST::initSet() {
     }
     dsp_.resetKit();
     for (int l = 0; l < mseq::kLanes; l++) clearLaneVoice(l);
+    haveSnap_ = false;
+    shuffleWasOn_ = false;
     setPath_.clear();
     dirty_ = false;
 }
@@ -650,8 +764,8 @@ void SeqVST::setParamFromUI(int id, double normalized) {
 }
 
 void SeqVST::followEngine() {
-    for (int l = 0; l < mseq::kLanes; l++) {
-        const int id = mseq::laneParam(l, mseq::kLaneRhythm);
+    for (int b = 0; b < mseq::kNumChangeable; b++) {
+        const int id = mseq::changedParam(b);
         const double n = norm(id, dsp_.getParam(id));
         if (std::fabs(getParamNormalized((ParamID)id) - n) < 1e-6) continue;
         setParamNormalized((ParamID)id, n);   // ours: also moves the editor's menu

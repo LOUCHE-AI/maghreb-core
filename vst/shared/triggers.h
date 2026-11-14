@@ -37,6 +37,11 @@ public:
         high_[t] = high;
     }
 
+    // A press that comes from the plug-in itself rather than a parameter -
+    // safe on the audio thread, like feed().
+    void post(int t) {
+        if (t >= 0 && t < kMax) pending_.fetch_or(1u << t, std::memory_order_acq_rel);
+    }
     // Any thread but the audio one: runs whatever was pressed since last time.
     void drain(const Run& run) {
         const unsigned bits = pending_.exchange(0, std::memory_order_acq_rel);

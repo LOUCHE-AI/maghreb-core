@@ -481,17 +481,20 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
         pageViews_[0].push_back(kitMenu_);
         pageViews_[0].push_back(muteBtn_);
 
-        // Shuffle belongs to the whole kit, not the selected lane, so it sits
-        // at the far end of the row, labelled.
-        auto* sl = makeLabel(CRect(kMar + 628, kHdrY, kMar + 690, kHdrY + kHdrH),
-                             "SHUFFLE", kDim, kRightText, true);
-        sl->setMouseEnabled(false);
-        frame->addView(sl);
-        pageViews_[0].push_back(sl);
-        shuffleMenu_ = addMenu(CRect(kMar + 696, kHdrY, kEdW - kMar, kHdrY + kHdrH), mseq::kShuffle);
+        // The selected lane's Shuffle: how often, and what its turn changes.
+        // RESTORE is for every lane, so it ends the row.
+        shuffleMenu_ = addMenu(CRect(kMar + 552, kHdrY, kMar + 670, kHdrY + kHdrH),
+                               mseq::shuffleEveryParam(0));
+        shuffleWhatMenu_ = addMenu(CRect(kMar + 674, kHdrY, kMar + 786, kHdrY + kHdrH),
+                                   mseq::shuffleWhatParam(0));
+        auto* rb = addAction(CRect(kMar + 790, kHdrY, kEdW - kMar, kHdrY + kHdrH), kRestoreId,
+                             "RESTORE",
+                             "Every lane back to the rhythm, kit and patch it had when Shuffle was turned on, and Shuffle off.");
         pageViews_[0].push_back(shuffleMenu_);
+        pageViews_[0].push_back(shuffleWhatMenu_);
+        pageViews_[0].push_back(rb);
 
-        voiceName_ = makeLabel(CRect(kMar + 446, kHdrY, kMar + 620, kHdrY + kHdrH), "",
+        voiceName_ = makeLabel(CRect(kMar + 446, kHdrY, kMar + 548, kHdrY + kHdrH), "",
                                kDim, kLeftText, true);
         voiceName_->setMouseEnabled(false);
         frame->addView(voiceName_);
@@ -675,7 +678,8 @@ void PLUGIN_API SeqEditor::close() {
     songBtn_ = nullptr; loopBtn_ = nullptr;
     status_ = nullptr; help_ = nullptr; setName_ = nullptr;
     kitName_ = nullptr; voiceName_ = nullptr;
-    rhythmMenu_ = nullptr; kitMenu_ = nullptr; muteBtn_ = nullptr; shuffleMenu_ = nullptr;
+    rhythmMenu_ = nullptr; kitMenu_ = nullptr; muteBtn_ = nullptr;
+    shuffleMenu_ = nullptr; shuffleWhatMenu_ = nullptr;
     tabs_[0] = tabs_[1] = tabs_[2] = nullptr;
     labelFont_ = nullptr; valueFont_ = nullptr; bigFont_ = nullptr; titleFont_ = nullptr;
     if (frame) { frame->forget(); frame = nullptr; mplat::closeEditorFrame(); }
@@ -704,6 +708,8 @@ void SeqEditor::selectLane(int lane) {
     if (rhythmMenu_) rhythmMenu_->setTag(mseq::laneParam(lane_, mseq::kLaneRhythm));
     if (kitMenu_)    kitMenu_->setTag(mseq::laneParam(lane_, mseq::kLaneKit));
     if (muteBtn_)    muteBtn_->setTag(mseq::laneParam(lane_, mseq::kLaneMute));
+    if (shuffleMenu_)     shuffleMenu_->setTag(mseq::shuffleEveryParam(lane_));
+    if (shuffleWhatMenu_) shuffleWhatMenu_->setTag(mseq::shuffleWhatParam(lane_));
     refreshValues();
     showVoiceName();
 }
@@ -781,6 +787,13 @@ void SeqEditor::valueChanged(CControl* c) {
         if (c->getValue() < 0.5f) return;
         patchPage_ = 1 - patchPage_;
         refreshPatch();
+        return;
+    }
+    if (tag == kRestoreId) {
+        if (c->getValue() < 0.5f) return;                // kick buttons fire twice
+        setHelp(plug_->runTrigger(kTrigRestore).c_str());
+        showVoiceName();
+        refreshValues(); refreshSet();
         return;
     }
     if (tag == kSetPrevId || tag == kSetNextId) {
@@ -931,7 +944,7 @@ void SeqEditor::refreshValues() {
         loopBtn_->setValue((float)plug_->getParamNormalized((ParamID)mseq::kSongLoop));
         loopBtn_->invalid();
     }
-    COptionMenu* menus[3] = {rhythmMenu_, kitMenu_, shuffleMenu_};
+    COptionMenu* menus[4] = {rhythmMenu_, kitMenu_, shuffleMenu_, shuffleWhatMenu_};
     for (COptionMenu* m : menus) {
         if (!m) continue;
         const ParamDef& d = params()[m->getTag()];
@@ -1149,6 +1162,10 @@ CMessageResult SeqEditor::notify(CBaseObject* sender, const char* message) {
         // A controller's buttons, run here so the window follows them.
         plug_->triggers().drain([this](int t) {
             const std::string m = plug_->runTrigger(t, browser_ ? browser_->index() : nullptr);
+            if (t >= kTrigShufflePatch0 || t == kTrigRestore) {   // a lane's patch may have moved
+                showVoiceName();
+                refreshValues();
+            }
             if (t < mdx::kNumPatchTriggers) {
                 if (browser_)
                     browser_->showSelection(plug_->laneCartPath(lane_), plug_->laneVoiceIndex(lane_));
@@ -1168,13 +1185,17 @@ CMessageResult SeqEditor::notify(CBaseObject* sender, const char* message) {
         if (song_ && page_ == 0) refreshSong();
         if (status_) {
             char buf[256];
-            int n = snprintf(buf, sizeof buf, "%s / %s / SEC %d / BAR %d.%d / %d VOICES",
-                             v.running ? "PLAYING" : "STOPPED", v.engine ? "DX7" : "FM",
-                             v.section + 1, v.barInSection + 1,
-                             std::max(1, v.sectionBars), v.voices);
-            if (v.shuffleLane >= 0 && n > 0 && n < (int)sizeof buf)
-                snprintf(buf + n, sizeof buf - n, " / SHUFFLE: LANE %d AT BAR %d",
-                         v.shuffleLane + 1, v.shuffleBar);
+            // Shuffle's next turn replaces the engine and voice count: the
+            // line has room for one or the other.
+            if (v.shuffleLane >= 0)
+                snprintf(buf, sizeof buf, "%s / SEC %d / BAR %d.%d / SHUFFLE L%d AT BAR %d",
+                         v.running ? "PLAYING" : "STOPPED", v.section + 1, v.barInSection + 1,
+                         std::max(1, v.sectionBars), v.shuffleLane + 1, v.shuffleBar);
+            else
+                snprintf(buf, sizeof buf, "%s / %s / SEC %d / BAR %d.%d / %d VOICES",
+                         v.running ? "PLAYING" : "STOPPED", v.engine ? "DX7" : "FM",
+                         v.section + 1, v.barInSection + 1,
+                         std::max(1, v.sectionBars), v.voices);
             status_->setText(buf);
         }
     }

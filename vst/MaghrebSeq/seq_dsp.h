@@ -63,7 +63,10 @@ enum Param {
     // brings it back as lane 1's.
     kShuffleEvery0,
     kShuffleWhat0 = kShuffleEvery0 + kLanes,
-    kNumParams = kShuffleWhat0 + kLanes
+    // Appended last, again. Sync on follows the host's tempo and position;
+    // off plays at Bpm, with the host only saying when to start and stop.
+    kSync = kShuffleWhat0 + kLanes, kBpm,
+    kNumParams
 };
 
 static inline int shuffleEveryParam(int lane) { return kShuffleEvery0 + lane; }
@@ -354,6 +357,14 @@ public:
     // Called once per block with the host's position in quarter notes and
     // whether it is running. Everything else follows from that.
     void setTransport(double beats, bool running) {
+        if (p_[kSync] < 0.5f) {
+            // Own tempo. The host's position is counted at the host's tempo,
+            // so it is only used for where to start; from there the beats are
+            // counted here, at Bpm. A host loop or scrub does not move it.
+            secPerBeat_ = 60.0 / clampf(p_[kBpm], 20.f, 300.f);
+            if (running && !running_) freeBeats_ = beats;
+            beats = freeBeats_;
+        }
         beats_ = beats;
         running_ = running;
         if (!running) { lastStep_ = -1; pendingN_ = 0; }
@@ -369,6 +380,9 @@ public:
             return;
         }
         renderInto(L, R, n);
+        // Where the next block starts on its own tempo. Kept while synced too,
+        // so turning Sync off mid-play carries on from here instead of jumping.
+        freeBeats_ = beats_ + (running_ ? (double)n / (sr_ * secPerBeat_) : 0.0);
     }
 
     // The engine itself, with no opinion about who is asking. The offline
@@ -970,6 +984,8 @@ private:
         p_[kOutput] = 0.f;
         p_[kSongOn] = 0.f;
         p_[kSongLoop] = 1.f;
+        p_[kSync] = 1.f;
+        p_[kBpm] = 120.f;
         p_[kEngine] = 0.f;
         p_[kTone] = 0.5f;
         p_[kVelFM] = 0.55f;
@@ -1000,6 +1016,7 @@ private:
     double sr_ = 44100.0;
     double secPerBeat_ = 0.5;           // 120 bpm until the host says otherwise
     double beats_ = 0;
+    double freeBeats_ = 0;              // own tempo: where the next block starts
     bool running_ = false;
     int64_t lastStep_ = -1;
 

@@ -100,6 +100,10 @@ const std::vector<ParamDef>& params() {
     }
     set(mseq::kVelFM, "Vel>FM", 0, 1, 0.55, 0, nullptr, 0, "%", 0, 100, 0,
         "How much a softer hit takes the FM index down on the DX7 engine, so quiet strokes are dull rather than merely quiet. No effect on FM.");
+    set(mseq::kSync, "Sync", 0, 1, 1, 1, kOffOn, 2, "", 0, 1, 0,
+        "On follows the host's tempo and position. Off plays at BPM: the host still starts and stops it, but a loop or scrub in the host does not move it.");
+    set(mseq::kBpm, "BPM", 40, 240, 120, 200, nullptr, 0, "bpm", 40, 240, 0,
+        "The tempo when Sync is off. Click the TEMPO cell to switch between the host's tempo and this one, drag it to set this one.");
 
     static const char* laneHelp[] = {
         "Which of the 90 rhythms this lane plays. Each keeps its own cycle length, so a 9/4 lane and a 4/4 lane drift in and out of phase the way they should.",

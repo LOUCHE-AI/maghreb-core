@@ -209,6 +209,36 @@ int main() {
         ok("the pattern fires once per marked step", hits >= 14 && hits <= 17, msg);
     }
 
+    // ---- Sync off: the host starts it, BPM sets the pace ----
+    {
+        // Host at 120 for two bars; rhythm 0 at its own 60 bpm should give
+        // half the 16 hits it gives in sync.
+        auto hitsAt = [&](bool sync) {
+            mseq::MaghrebSeq g;
+            g.setSampleRate(SR);
+            g.setParam(mseq::laneParam(0, mseq::kLaneRhythm), 0.f);
+            for (int l = 1; l < mseq::kLanes; l++)
+                g.setParam(mseq::laneParam(l, mseq::kLaneMute), 1.f);
+            g.setParam(mseq::kSync, sync ? 1.f : 0.f);
+            g.setParam(mseq::kBpm, 60.f);
+            const int n = 256;
+            std::vector<float> l(n), r(n), x;
+            double beats = 0;
+            for (int b = 0; b < (int)(4.0 * SR / n); b++) {
+                g.setTempo(120.0);
+                g.setTransport(beats, true);
+                g.process(l.data(), r.data(), n);
+                x.insert(x.end(), l.begin(), l.end());
+                beats += n / (SR * 0.5);
+            }
+            return countHits(x);
+        };
+        const int synced = hitsAt(true), own = hitsAt(false);
+        snprintf(msg, sizeof msg, "%d in sync at 120, %d on its own at 60", synced, own);
+        ok("Sync off plays at BPM, not the host's tempo",
+           synced >= 14 && synced <= 17 && own >= 7 && own <= 9, msg);
+    }
+
     // ---- lanes stack ----
     {
         // Counting onsets is the wrong measure here: once several drums are

@@ -210,6 +210,7 @@ private:
     LaneGrid* grid_ = nullptr;
     SongStrip* song_ = nullptr;
     ParamRow* prow_ = nullptr;
+    double tempoDrag_ = 0.0;   // how far the TEMPO cell has been dragged this gesture
     mdx::CartPanel* browser_ = nullptr;
     OpRows* ops_ = nullptr;
     StrokePads* pads_ = nullptr;

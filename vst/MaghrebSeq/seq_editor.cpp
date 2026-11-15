@@ -9,6 +9,7 @@
 #include "ui_scale.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 using namespace VSTGUI;
@@ -716,6 +717,21 @@ void SeqEditor::selectLane(int lane) {
 
 void SeqEditor::nudgeParam(int param, double delta, int phase) {
     if (!plug_ || param < 0 || param >= kTotalParams) return;
+    // TEMPO: a click switches between the host's tempo and BPM, a drag sets
+    // BPM - and leaves Sync, since a tempo being set is one meant to be heard.
+    if (param == mseq::kBpm) {
+        const bool synced = plug_->getParamNormalized((ParamID)mseq::kSync) >= 0.5;
+        if (phase == 0) tempoDrag_ = 0.0;
+        else if (phase == 1) tempoDrag_ += std::fabs(delta);
+        const bool moved = tempoDrag_ > 0.01;
+        if ((phase == 2 && !moved) || (phase == 1 && moved && synced)) {
+            VSTGUIEditor::beginEdit(mseq::kSync);
+            plug_->setParamFromUI(mseq::kSync, synced ? 0.0 : 1.0);
+            VSTGUIEditor::endEdit(mseq::kSync);
+            tempoDrag_ = 1.0;                  // switched once per gesture
+            refreshValues();
+        }
+    }
     if (phase == 0) { VSTGUIEditor::beginEdit(param); return; }
     if (phase == 2) { VSTGUIEditor::endEdit(param); return; }
     double v = plug_->getParamNormalized((ParamID)param) + delta;
@@ -901,7 +917,7 @@ void SeqEditor::refreshValues() {
     if (!plug_ || !prow_) return;
 
     struct Def { int id; const char* label; bool lane; };
-    static const Def defs[8] = {
+    static const Def defs[9] = {
         { mseq::kLaneLevel, "LEVEL",  true  },
         { mseq::kLanePan,   "PAN",    true  },
         { mseq::kLaneTune,  "TUNE",   true  },
@@ -910,11 +926,12 @@ void SeqEditor::refreshValues() {
         { mseq::kSwing,     "SWING",  false },
         { mseq::kMaster,    "MASTER", false },
         { mseq::kOutput,    "OUT",    false },
+        { mseq::kBpm,       "TEMPO",  false },
     };
 
     std::vector<ParamRow::Cell> cells;
-    cells.reserve(8);
-    for (int i = 0; i < 8; i++) {
+    cells.reserve(9);
+    for (int i = 0; i < 9; i++) {
         ParamRow::Cell cell;
         cell.param = defs[i].lane ? mseq::laneParam(lane_, defs[i].id) : defs[i].id;
         cell.label = defs[i].label;
@@ -927,6 +944,9 @@ void SeqEditor::refreshValues() {
             const ParamDef& d = params()[cell.param];
             if (!d.unit.empty()) { cell.value += " "; cell.value += d.unit; }
         }
+        if (cell.param == mseq::kBpm &&
+            plug_->getParamNormalized((ParamID)mseq::kSync) >= 0.5)
+            cell.value = "SYNC";
         cells.push_back(cell);
     }
     prow_->setCells(cells);

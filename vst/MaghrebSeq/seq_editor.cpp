@@ -498,7 +498,7 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
         // The lane's patch, as a button: one click puts the lane back on its drum.
         voiceName_ = addAction(CRect(kMar + 446, kHdrY, kMar + 548, kHdrY + kHdrH),
                                kClearVoiceId, "DRUM",
-                               "The patch this lane plays. Click to put the lane back on its drum.");
+                               "The patch this lane plays. Click to put the lane back on the darbuka.");
         pageViews_[0].push_back(voiceName_);
     }
 
@@ -596,7 +596,7 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
             kClearKitId, "FACTORY", "Put the module's own strokes back."));
         pageViews_[2].push_back(addAction(CRect(kMar + 500, y, kMar + 624, y + 20),
             kClearVoiceId, "LANE DRUM",
-            "Put the selected lane back on its drum, off the cartridge patch."));
+            "Put the selected lane back on the darbuka, off the cartridge patch."));
     }
 
     // ---- the pages ----
@@ -884,10 +884,15 @@ void SeqEditor::valueChanged(CControl* c) {
     }
     if (tag == kClearVoiceId) {
         if (c->getValue() < 0.5f) return;
+        // Back to the default: off the patch, and on the darbuka.
         plug_->clearLaneVoice(lane_);
+        const int kit = mseq::laneParam(lane_, mseq::kLaneKit);
+        VSTGUIEditor::beginEdit(kit);
+        plug_->setParamFromUI(kit, 0.5);        // Bendir, Darbuka, Tar
+        VSTGUIEditor::endEdit(kit);
         plug_->markDirty();
-        setHelp("That lane is back on its drum.");
-        showVoiceName(); refreshSet();
+        setHelp("That lane is back on the darbuka.");
+        showVoiceName(); refreshValues(); refreshSet();
         return;
     }
 

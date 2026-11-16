@@ -122,7 +122,7 @@ const std::vector<ParamDef>& params() {
             0, mseq::kNumRhythms - 1, rhythmNames(), mseq::kNumRhythms,
             "", 0, mseq::kNumRhythms - 1, 0, laneHelp[0]);
         snprintf(n, sizeof n, "L%d Kit", l + 1);
-        set(mseq::laneParam(l, mseq::kLaneKit), n, 0, 2, 0, 2, kKitNames, 3,
+        set(mseq::laneParam(l, mseq::kLaneKit), n, 0, 2, 1, 2, kKitNames, 3,   // darbuka
             "", 0, 2, 0, laneHelp[1]);
         snprintf(n, sizeof n, "L%d Level", l + 1);
         set(mseq::laneParam(l, mseq::kLaneLevel), n, 0, 1, 0.9, 0, nullptr, 0,

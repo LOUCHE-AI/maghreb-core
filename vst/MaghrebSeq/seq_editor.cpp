@@ -495,10 +495,10 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
         pageViews_[0].push_back(shuffleWhatMenu_);
         pageViews_[0].push_back(rb);
 
-        voiceName_ = makeLabel(CRect(kMar + 446, kHdrY, kMar + 548, kHdrY + kHdrH), "",
-                               kDim, kLeftText, true);
-        voiceName_->setMouseEnabled(false);
-        frame->addView(voiceName_);
+        // The lane's patch, as a button: one click puts the lane back on its drum.
+        voiceName_ = addAction(CRect(kMar + 446, kHdrY, kMar + 548, kHdrY + kHdrH),
+                               kClearVoiceId, "DRUM",
+                               "The patch this lane plays. Click to put the lane back on its drum.");
         pageViews_[0].push_back(voiceName_);
     }
 
@@ -595,8 +595,8 @@ bool PLUGIN_API SeqEditor::open(void* parent, const PlatformType& type) {
         pageViews_[2].push_back(addAction(CRect(kMar + 390, y, kMar + 474, y + 20),
             kClearKitId, "FACTORY", "Put the module's own strokes back."));
         pageViews_[2].push_back(addAction(CRect(kMar + 500, y, kMar + 624, y + 20),
-            kClearVoiceId, "LANE DERIVED",
-            "Put the selected lane back on the patch derived from its strokes."));
+            kClearVoiceId, "LANE DRUM",
+            "Put the selected lane back on its drum, off the cartridge patch."));
     }
 
     // ---- the pages ----
@@ -886,7 +886,7 @@ void SeqEditor::valueChanged(CControl* c) {
         if (c->getValue() < 0.5f) return;
         plug_->clearLaneVoice(lane_);
         plug_->markDirty();
-        setHelp("That lane is back on its derived patch.");
+        setHelp("That lane is back on its drum.");
         showVoiceName(); refreshSet();
         return;
     }
@@ -1171,10 +1171,10 @@ void SeqEditor::showVoiceName() {
     if (!voiceName_ || !plug_) return;
     char b[192];
     if (plug_->laneHasVoice(lane_))
-        snprintf(b, sizeof b, "LANE %d  %s", lane_ + 1, plug_->laneVoiceName(lane_));
+        snprintf(b, sizeof b, "x %s", plug_->laneVoiceName(lane_));
     else
-        snprintf(b, sizeof b, "LANE %d  derived", lane_ + 1);
-    voiceName_->setText(b);
+        snprintf(b, sizeof b, "DRUM");
+    voiceName_->setTitle(b);
 }
 
 CMessageResult SeqEditor::notify(CBaseObject* sender, const char* message) {

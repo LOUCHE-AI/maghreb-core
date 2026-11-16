@@ -223,7 +223,7 @@ private:
     VSTGUI::CTextLabel* help_ = nullptr;
     VSTGUI::CTextLabel* setName_ = nullptr;
     VSTGUI::CTextLabel* kitName_ = nullptr;
-    VSTGUI::CTextLabel* voiceName_ = nullptr;
+    VSTGUI::CTextButton* voiceName_ = nullptr;
     VSTGUI::COptionMenu* rhythmMenu_ = nullptr;
     VSTGUI::COptionMenu* kitMenu_ = nullptr;
     VSTGUI::CTextButton* muteBtn_ = nullptr;

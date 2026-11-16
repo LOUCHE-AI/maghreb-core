@@ -991,10 +991,10 @@ private:
         p_[kVelFM] = 0.55f;
         for (int l = 0; l < kLanes; l++) { p_[shuffleEveryParam(l)] = 0.f; p_[shuffleWhatParam(l)] = 0.f; }
 
-        // four lanes on four different rhythms and kits, so it makes a groove
+        // four lanes on four different rhythms on the darbuka, so it makes a groove
         // the moment it is loaded rather than one drum on its own
         const int startRhythm[kLanes] = {0, 6, 0, 12};
-        const int startKit[kLanes] = {0, 1, 2, 1};
+        const int startKit[kLanes] = {1, 1, 1, 1};   // darbuka throughout
         for (int i = 0; i < kLanes; i++) {
             p_[laneParam(i, kLaneRhythm)] = (float)startRhythm[i];
             p_[laneParam(i, kLaneKit)] = (float)startKit[i];
